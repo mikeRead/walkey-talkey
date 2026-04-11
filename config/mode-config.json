@@ -1,0 +1,300 @@
+{
+  "version": 1,
+  "activeMode": "cursor",
+  "defaults": {
+    "touch": {
+      "holdMs": 400,
+      "doubleTapMs": 350,
+      "swipeMinDistance": 40
+    }
+  },
+  "wifi": {
+    "sta": {
+      "ssid": "YourNetworkName",
+      "password": "YourPassword"
+    },
+    "ap": {
+      "ssid": "walkey-talkey",
+      "password": "secretKEY"
+    },
+    "hostname": "walkey-talkey",
+    "localUrl": "walkey-talkey.local"
+  },
+  "globalBindings": [
+    {
+      "input": "boot_button",
+      "trigger": "press",
+      "actions": [
+        { "type": "enter_boot_mode" }
+      ]
+    },
+    {
+      "input": "boot_button",
+      "trigger": "release",
+      "actions": [
+        { "type": "exit_boot_mode" }
+      ]
+    }
+  ],
+  "bootMode": {
+    "label": "Mode Control",
+    "ui": {
+      "title": "Swipe to switch mode",
+      "subtitle": "Hold BOOT and swipe to change modes",
+      "showModeList": true,
+      "showGestureHints": true,
+      "showCurrentModeCard": true
+    },
+    "bindings": [
+      {
+        "input": "touch",
+        "trigger": "swipe_right",
+        "actions": [
+          { "type": "cycle_mode", "direction": "next" },
+          { "type": "ui_show_mode" }
+        ]
+      },
+      {
+        "input": "touch",
+        "trigger": "swipe_left",
+        "actions": [
+          { "type": "cycle_mode", "direction": "previous" },
+          { "type": "ui_show_mode" }
+        ]
+      },
+      {
+        "input": "touch",
+        "trigger": "tap",
+        "actions": [
+          { "type": "ui_show_mode" }
+        ]
+      },
+      {
+        "input": "touch",
+        "trigger": "long_press",
+        "actions": [
+          { "type": "set_mode", "mode": "cursor" },
+          { "type": "ui_show_mode" }
+        ]
+      }
+    ]
+  },
+  "modes": [
+    {
+      "id": "cursor",
+      "cycleOrder": 0,
+      "label": "Cursor",
+      "bindings": [
+        {
+          "input": "touch",
+          "trigger": "hold_start",
+          "actions": [
+            { "type": "hid_key_down", "key": "F13" },
+            { "type": "mic_gate", "enabled": true },
+            { "type": "ui_hint", "text": "Dictation active" }
+          ]
+        },
+        {
+          "input": "touch",
+          "trigger": "hold_end",
+          "actions": [
+            { "type": "mic_gate", "enabled": false },
+            { "type": "hid_key_up", "key": "F13" },
+            { "type": "ui_hint", "text": "Cursor mode" }
+          ]
+        },
+        {
+          "input": "touch",
+          "trigger": "tap",
+          "actions": [
+            { "type": "hid_key_tap", "key": "F14" },
+            { "type": "ui_hint", "text": "Cursor mode" }
+          ]
+        },
+        {
+          "input": "touch",
+          "trigger": "double_tap",
+          "actions": [
+            { "type": "hid_key_tap", "key": "ENTER" },
+            { "type": "ui_hint", "text": "Submit" }
+          ]
+        },
+        {
+          "input": "touch",
+          "trigger": "swipe_up",
+          "actions": [
+            { "type": "hid_shortcut_tap", "modifiers": ["CTRL"], "key": "A" },
+            { "type": "sleep_ms", "duration_ms": 20 },
+            { "type": "hid_key_tap", "key": "BACKSPACE" },
+            { "type": "ui_hint", "text": "Clear field" }
+          ]
+        },
+        {
+          "input": "touch",
+          "trigger": "swipe_down",
+          "actions": [
+            { "type": "hid_shortcut_tap", "modifiers": ["CTRL"], "key": "." },
+            { "type": "ui_hint", "text": "Toggle text mode" }
+          ]
+        },
+        {
+          "input": "touch",
+          "trigger": "swipe_left",
+          "actions": [
+            { "type": "hid_shortcut_tap", "modifiers": ["CTRL"], "key": "N" },
+            { "type": "ui_hint", "text": "New chat" }
+          ]
+        },
+        {
+          "input": "touch",
+          "trigger": "swipe_right",
+          "actions": [
+            { "type": "hid_key_tap", "key": "ENTER" },
+            { "type": "ui_hint", "text": "Enter" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "presentation",
+      "cycleOrder": 1,
+      "label": "Presentation",
+      "bindings": [
+        {
+          "input": "touch",
+          "trigger": "swipe_left",
+          "actions": [
+            { "type": "hid_key_tap", "key": "PAGE_DOWN" },
+            { "type": "ui_hint", "text": "Next slide" }
+          ]
+        },
+        {
+          "input": "touch",
+          "trigger": "swipe_right",
+          "actions": [
+            { "type": "hid_key_tap", "key": "PAGE_UP" },
+            { "type": "ui_hint", "text": "Previous slide" }
+          ]
+        },
+        {
+          "input": "touch",
+          "trigger": "tap",
+          "actions": [
+            { "type": "hid_key_tap", "key": "SPACE" },
+            { "type": "ui_hint", "text": "Presentation mode" }
+          ]
+        },
+        {
+          "input": "touch",
+          "trigger": "double_tap",
+          "actions": [
+            { "type": "hid_key_tap", "key": "B" },
+            { "type": "ui_hint", "text": "Black screen" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "media",
+      "cycleOrder": 2,
+      "label": "Media",
+      "bindings": [
+        {
+          "input": "touch",
+          "trigger": "tap",
+          "actions": [
+            { "type": "hid_usage_tap", "usage": { "report": "consumer", "usagePage": 12, "usage": 205 } },
+            { "type": "ui_hint", "text": "Media mode" }
+          ]
+        },
+        {
+          "input": "touch",
+          "trigger": "swipe_left",
+          "actions": [
+            { "type": "hid_usage_tap", "usage": "MEDIA_PREV_TRACK" },
+            { "type": "ui_hint", "text": "Media previous" }
+          ]
+        },
+        {
+          "input": "touch",
+          "trigger": "swipe_right",
+          "actions": [
+            { "type": "hid_usage_tap", "usage": "MEDIA_NEXT_TRACK" },
+            { "type": "ui_hint", "text": "Media next" }
+          ]
+        },
+        {
+          "input": "touch",
+          "trigger": "swipe_up",
+          "actions": [
+            { "type": "hid_usage_tap", "usage": "VOLUME_UP" },
+            { "type": "ui_hint", "text": "Media up" }
+          ]
+        },
+        {
+          "input": "touch",
+          "trigger": "swipe_down",
+          "actions": [
+            { "type": "hid_usage_tap", "usage": "VOLUME_DOWN" },
+            { "type": "ui_hint", "text": "Media down" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "navigation",
+      "cycleOrder": 3,
+      "label": "Navigation",
+      "bindings": [
+        {
+          "input": "touch",
+          "trigger": "swipe_up",
+          "actions": [
+            { "type": "hid_key_tap", "key": "UP_ARROW" },
+            { "type": "ui_hint", "text": "Up" }
+          ]
+        },
+        {
+          "input": "touch",
+          "trigger": "swipe_down",
+          "actions": [
+            { "type": "hid_key_tap", "key": "DOWN_ARROW" },
+            { "type": "ui_hint", "text": "Down" }
+          ]
+        },
+        {
+          "input": "touch",
+          "trigger": "swipe_left",
+          "actions": [
+            { "type": "hid_key_tap", "key": "LEFT_ARROW" },
+            { "type": "ui_hint", "text": "Left" }
+          ]
+        },
+        {
+          "input": "touch",
+          "trigger": "swipe_right",
+          "actions": [
+            { "type": "hid_key_tap", "key": "RIGHT_ARROW" },
+            { "type": "ui_hint", "text": "Right" }
+          ]
+        },
+        {
+          "input": "touch",
+          "trigger": "tap",
+          "actions": [
+            { "type": "hid_key_tap", "key": "ESC" },
+            { "type": "ui_hint", "text": "Navigation mode" }
+          ]
+        },
+        {
+          "input": "touch",
+          "trigger": "double_tap",
+          "actions": [
+            { "type": "hid_key_tap", "key": "ESC" },
+            { "type": "ui_hint", "text": "Cancel" }
+          ]
+        }
+      ]
+    }
+  ]
+}

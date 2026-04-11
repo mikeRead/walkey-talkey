@@ -1,0 +1,28 @@
+# The following lines of boilerplate have to be in your project's
+# CMakeLists in this exact order for cmake to work correctly
+cmake_minimum_required(VERSION 3.5)
+
+add_compile_definitions(
+    CFG_TUD_AUDIO=1
+    CFG_TUD_AUDIO_FUNC_1_DESC_LEN=TUD_AUDIO_MIC_ONE_CH_DESC_LEN
+    CFG_TUD_AUDIO_FUNC_1_CTRL_BUF_SZ=64
+    CFG_TUD_AUDIO_ENABLE_EP_IN=1
+    CFG_TUD_AUDIO_FUNC_1_SAMPLE_RATE=48000
+    CFG_TUD_AUDIO_FUNC_1_N_BYTES_PER_SAMPLE_TX=2
+    CFG_TUD_AUDIO_FUNC_1_N_CHANNELS_TX=1
+    CFG_TUD_AUDIO_EP_SZ_IN=98
+    CFG_TUD_AUDIO_FUNC_1_EP_IN_SZ_MAX=98
+    CFG_TUD_AUDIO_FUNC_1_EP_IN_SW_BUF_SZ=392
+    CONFIG_TINYUSB_MSC_ENABLED=1
+    CONFIG_TINYUSB_MSC_BUFSIZE=512
+    CONFIG_TINYUSB_DESC_MSC_STRING="WalKEY-TalKEY Storage"
+    CONFIG_TINYUSB_CDC_COUNT=1
+    CONFIG_TINYUSB_CDC_RX_BUFSIZE=512
+    CONFIG_TINYUSB_CDC_TX_BUFSIZE=512
+    CONFIG_TINYUSB_CDC_EP_BUFSIZE=64
+)
+
+include($ENV{IDF_PATH}/tools/cmake/project.cmake)
+
+add_compile_options(-Wno-format)
+project(ptt_smart_mic)

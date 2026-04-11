@@ -1,0 +1,314 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mode-config.schema.json",
+  "title": "Mode Config",
+  "type": "object",
+  "description": "JSON configuration for the mode system. Bindings are declarative macros: each binding matches one input and trigger, then runs its actions array in order. Future editor/API output should emit the canonical forms documented here: modes as an array, modifiers as a modifiers array, structured keyboard shortcuts, and hid_usage_* for non-keyboard HID.",
+  "additionalProperties": false,
+  "required": ["version", "globalBindings", "bootMode", "modes"],
+  "properties": {
+    "version": {
+      "description": "Config format version for migration safety.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "activeMode": {
+      "description": "Mode id selected at boot. Must match a configured mode id.",
+      "type": "string"
+    },
+    "defaults": {
+      "type": "object",
+      "description": "Shared default timings and thresholds used by the input router.",
+      "additionalProperties": false,
+      "properties": {
+        "touch": {
+          "type": "object",
+          "description": "Touch gesture timing and threshold defaults.",
+          "additionalProperties": false,
+          "properties": {
+            "holdMs": { "type": "integer", "minimum": 0, "description": "Milliseconds before a stationary touch becomes hold_start and long_press." },
+            "doubleTapMs": { "type": "integer", "minimum": 0, "description": "Maximum gap between taps before a pending tap is emitted instead of double_tap." },
+            "swipeMinDistance": { "type": "integer", "minimum": 0, "description": "Minimum travel distance before a touch is classified as a swipe." }
+          }
+        }
+      }
+    },
+    "wifi": {
+      "type": "object",
+      "description": "Network preferences for router join, fallback SoftAP access, and local discovery naming.",
+      "additionalProperties": false,
+      "properties": {
+        "sta": {
+          "$ref": "#/$defs/wifiCredentials",
+          "description": "Router credentials used for STA join attempts before falling back to the built-in SoftAP."
+        },
+        "ap": {
+          "$ref": "#/$defs/wifiCredentials",
+          "description": "Fallback SoftAP credentials used when router join is unavailable or fails."
+        },
+        "hostname": {
+          "type": "string",
+          "description": "mDNS hostname stem without protocol; for example walkey-talkey."
+        },
+        "localUrl": {
+          "type": "string",
+          "description": "Human-facing local hostname string advertised in docs and UI, for example walkey-talkey.local."
+        }
+      }
+    },
+    "globalBindings": {
+      "description": "Bindings that stay active regardless of the selected mode.",
+      "$ref": "#/$defs/bindings"
+    },
+    "bootMode": {
+      "type": "object",
+      "description": "Temporary BOOT-held mode selection state and its bindings.",
+      "additionalProperties": false,
+      "required": ["label", "bindings"],
+      "properties": {
+        "label": { "type": "string" },
+        "ui": {
+          "type": "object",
+          "description": "Optional UI hints for the BOOT control overlay.",
+          "additionalProperties": false,
+          "properties": {
+            "title": { "type": "string" },
+            "subtitle": { "type": "string" },
+            "showModeList": { "type": "boolean" },
+            "showGestureHints": { "type": "boolean" },
+            "showCurrentModeCard": { "type": "boolean" }
+          }
+        },
+        "bindings": {
+          "$ref": "#/$defs/bindings"
+        }
+      }
+    },
+    "modes": {
+      "oneOf": [
+        {
+          "type": "array",
+          "description": "Preferred form: explicit mode objects with stable ids and optional cycleOrder.",
+          "items": { "$ref": "#/$defs/mode" }
+        },
+        {
+          "type": "object",
+          "description": "Legacy compatibility form. Prefer the array form for new configs and future API/UI tooling.",
+          "additionalProperties": { "$ref": "#/$defs/legacyMode" }
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "wifiCredentials": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ssid": { "type": "string" },
+        "password": { "type": "string" }
+      }
+    },
+    "bindings": {
+      "type": "array",
+      "description": "Ordered list of bindings. Each binding maps one input and trigger to an actions array. At runtime, no more than 8 bindings may match a single dispatch context after global bindings are combined with the active mode or bootMode.",
+      "items": { "$ref": "#/$defs/binding" }
+    },
+    "binding": {
+      "type": "object",
+      "description": "A binding is the smallest macro container: one input, one trigger, then actions executed in array order.",
+      "additionalProperties": false,
+      "required": ["input", "trigger", "actions"],
+      "properties": {
+        "input": { "type": "string", "description": "Normalized input source such as touch or boot_button." },
+        "trigger": { "type": "string", "description": "Normalized trigger emitted by the input router such as tap, hold_start, or swipe_left." },
+        "actions": {
+          "type": "array",
+          "description": "Ordered macro steps. The runtime executes them from first to last. If one action fails, later actions in that binding are skipped.",
+          "items": { "$ref": "#/$defs/action" }
+        }
+      }
+    },
+    "mode": {
+      "type": "object",
+      "description": "Preferred mode definition shape with stable id and optional explicit cycle order.",
+      "additionalProperties": false,
+      "required": ["id", "label", "bindings"],
+      "properties": {
+        "id": { "type": "string", "description": "Stable mode identifier used by activeMode and set_mode." },
+        "cycleOrder": { "type": "integer", "minimum": 0, "description": "Optional explicit mode ordering for cycle_mode and UI tooling. Lower values come first." },
+        "label": { "type": "string", "description": "User-facing mode label shown in the UI." },
+        "bindings": { "$ref": "#/$defs/bindings" }
+      }
+    },
+    "legacyMode": {
+      "type": "object",
+      "description": "Legacy object-map mode definition. Use only for compatibility with older configs.",
+      "additionalProperties": false,
+      "required": ["label", "bindings"],
+      "properties": {
+        "cycleOrder": { "type": "integer", "minimum": 0 },
+        "label": { "type": "string" },
+        "bindings": { "$ref": "#/$defs/bindings" }
+      }
+    },
+    "modifierList": {
+      "description": "Keyboard modifier tokens. Prefer the array form for new configs and UI/API tooling.",
+      "oneOf": [
+        { "type": "string" },
+        {
+          "type": "array",
+          "description": "Preferred modifier form. Multiple entries are ORed into one keyboard modifier bitmask.",
+          "items": { "type": "string" }
+        }
+      ]
+    },
+    "hidUsageObject": {
+      "type": "object",
+      "description": "Raw HID usage for advanced cases. Prefer named tokens when possible, and use this object when a canonical token is not available.",
+      "additionalProperties": false,
+      "required": ["report", "usagePage", "usage"],
+      "properties": {
+        "report": {
+          "type": "string",
+          "enum": ["keyboard", "consumer", "system"]
+        },
+        "usagePage": { "type": "integer", "minimum": 0 },
+        "usage": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "action": {
+      "type": "object",
+      "description": "One macro step. Actions run sequentially in array order.",
+      "oneOf": [
+        {
+          "description": "Press a keyboard usage and keep it held until a later key-up or reset. Intended for hold_start style flows.",
+          "additionalProperties": false,
+          "required": ["type", "key"],
+          "properties": {
+            "type": { "const": "hid_key_down" },
+            "key": {
+              "oneOf": [{ "type": "string" }, { "$ref": "#/$defs/hidUsageObject" }]
+            },
+            "modifiers": { "$ref": "#/$defs/modifierList" }
+          }
+        },
+        {
+          "description": "Release a previously held keyboard usage.",
+          "additionalProperties": false,
+          "required": ["type", "key"],
+          "properties": {
+            "type": { "const": "hid_key_up" },
+            "key": {
+              "oneOf": [{ "type": "string" }, { "$ref": "#/$defs/hidUsageObject" }]
+            },
+            "modifiers": { "$ref": "#/$defs/modifierList" }
+          }
+        },
+        {
+          "description": "Tap a keyboard key. The firmware inserts its built-in tap gap automatically, so use sleep_ms only for extra spacing between macro steps.",
+          "additionalProperties": false,
+          "required": ["type", "key"],
+          "properties": {
+            "type": { "const": "hid_key_tap" },
+            "key": { "type": "string" },
+            "modifiers": { "$ref": "#/$defs/modifierList" }
+          }
+        },
+        {
+          "description": "Preferred keyboard chord form. Use modifiers plus key instead of embedding a plus-separated shortcut string in key.",
+          "additionalProperties": false,
+          "required": ["type", "key"],
+          "properties": {
+            "type": { "const": "hid_shortcut_tap" },
+            "key": { "type": "string", "description": "Keyboard token for the non-modifier key." },
+            "modifier": { "$ref": "#/$defs/modifierList" },
+            "modifiers": { "$ref": "#/$defs/modifierList", "description": "Preferred modifier field. The singular modifier field remains accepted for compatibility." }
+          }
+        },
+        {
+          "description": "Press or release only keyboard modifiers without a non-modifier key usage. Prefer the modifiers field; the singular modifier field remains compatibility-only input.",
+          "additionalProperties": false,
+          "required": ["type"],
+          "properties": {
+            "type": { "enum": ["hid_modifier_down", "hid_modifier_up"] },
+            "modifier": { "$ref": "#/$defs/modifierList" },
+            "modifiers": { "$ref": "#/$defs/modifierList" }
+          }
+        },
+        {
+          "description": "Generic HID usage actions. Use these for consumer or system controls, or for advanced keyboard usage forms.",
+          "additionalProperties": false,
+          "required": ["type", "usage"],
+          "properties": {
+            "type": { "enum": ["hid_usage_down", "hid_usage_up", "hid_usage_tap"] },
+            "usage": {
+              "oneOf": [{ "type": "string" }, { "$ref": "#/$defs/hidUsageObject" }]
+            },
+            "modifiers": { "$ref": "#/$defs/modifierList" }
+          }
+        },
+        {
+          "description": "Sleep between macro steps. This adds extra timing beyond the built-in tap gap used by tap actions.",
+          "additionalProperties": false,
+          "required": ["type", "duration_ms"],
+          "properties": {
+            "type": { "const": "sleep_ms" },
+            "duration_ms": { "type": "integer", "minimum": 0 }
+          }
+        },
+        {
+          "description": "Set the microphone gate state explicitly.",
+          "additionalProperties": false,
+          "required": ["type", "enabled"],
+          "properties": {
+            "type": { "const": "mic_gate" },
+            "enabled": { "type": "boolean" }
+          }
+        },
+        {
+          "description": "Set transient user-visible hint text in the UI.",
+          "additionalProperties": false,
+          "required": ["type", "text"],
+          "properties": {
+            "type": { "const": "ui_hint" },
+            "text": { "type": "string" }
+          }
+        },
+        {
+          "description": "Switch directly to a named mode id.",
+          "additionalProperties": false,
+          "required": ["type", "mode"],
+          "properties": {
+            "type": { "const": "set_mode" },
+            "mode": { "type": "string" }
+          }
+        },
+        {
+          "description": "Cycle to the next or previous mode according to runtime mode ordering.",
+          "additionalProperties": false,
+          "required": ["type", "direction"],
+          "properties": {
+            "type": { "const": "cycle_mode" },
+            "direction": { "type": "string", "enum": ["next", "previous"] }
+          }
+        },
+        {
+          "description": "Built-in device/UI control actions that do not require extra fields.",
+          "additionalProperties": false,
+          "required": ["type"],
+          "properties": {
+            "type": {
+              "enum": [
+                "enter_boot_mode",
+                "exit_boot_mode",
+                "mic_gate_toggle",
+                "ui_show_mode",
+                "noop"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

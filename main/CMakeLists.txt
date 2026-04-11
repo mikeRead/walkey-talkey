@@ -1,0 +1,31 @@
+idf_component_register(
+    SRCS
+        action_engine.c
+        main.c
+        audio_input.c
+        boot_button.c
+        config_api_service.c
+        config_http_server.c
+        input_router.c
+        mode_config.c
+        mode_hid_tokens.c
+        mode_json_loader.c
+        mode_controller.c
+        mouse_mode.c
+        multitouch_poc.c
+        ptt_state.c
+        ui_status.c
+        sd_card.c
+        sd_card_config.c
+        usb_cdc_log.c
+        usb_composite.c
+    EMBED_TXTFILES
+        ../config/mode-config.schema.json
+        ../docs/AI_GUIDE.md
+        ../docs/USER_GUIDE.md
+        ../docs/REST_API.md
+        ../README.md
+        ../docs/autorun.inf
+        ../docs/ico.ico
+    INCLUDE_DIRS .
+    REQUIRES spiffs esp_http_server esp_wifi esp_event esp_netif nvs_flash mdns espressif__esp-sr)

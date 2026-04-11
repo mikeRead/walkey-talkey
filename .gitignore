@@ -1,0 +1,19 @@
+# Build output
+build/
+
+# Managed components (fetched by IDF component manager)
+managed_components/
+
+# sdkconfig is machine-specific; keep sdkconfig.defaults as the source of truth
+sdkconfig
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+Thumbs.db
+.DS_Store

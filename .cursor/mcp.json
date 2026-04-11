@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "walkey-talkey": {
+      "command": "npx",
+      "args": ["walkey-talkey-mcp"],
+      "local_command": "node",
+      "local_args": ["mcp/index.js"]
+    }
+  }
+}
