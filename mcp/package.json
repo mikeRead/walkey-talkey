@@ -23,9 +23,11 @@
     "hid"
   ],
   "license": "MIT",
+  "homepage": "https://github.com/mikeRead/walkey-talkey",
   "repository": {
     "type": "git",
-    "url": "https://github.com/c-Lab-esp32/ESP32-S3-Touch-AMOLED-1.75"
+    "url": "https://github.com/mikeRead/walkey-talkey.git",
+    "directory": "mcp"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.29.0",

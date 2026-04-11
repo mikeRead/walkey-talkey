@@ -6,6 +6,22 @@
       "holdMs": 400,
       "doubleTapMs": 350,
       "swipeMinDistance": 40
+    },
+    "defaultMouse": "airMouse",
+    "airMouse": {
+      "sensitivity": 0.15,
+      "deadZoneDps": 6.0,
+      "easingExponent": 1.25,
+      "maxDps": 512.0,
+      "emaAlpha": 0.35,
+      "rewindDepth": 12,
+      "rewindDecay": 0.7,
+      "calibrationSamples": 50
+    },
+    "touchMouse": {
+      "sensitivity": 1.0,
+      "moveThresholdPx": 10,
+      "tapDragWindowMs": 200
     }
   },
   "wifi": {
@@ -190,6 +206,22 @@
           "actions": [
             { "type": "hid_key_tap", "key": "B" },
             { "type": "ui_hint", "text": "Black screen" }
+          ]
+        },
+        {
+          "input": "touch",
+          "trigger": "hold_start",
+          "actions": [
+            { "type": "mouse_on", "mouseType": "airMouse" },
+            { "type": "ui_hint", "text": "Air mouse" }
+          ]
+        },
+        {
+          "input": "touch",
+          "trigger": "hold_end",
+          "actions": [
+            { "type": "mouse_off" },
+            { "type": "ui_hint", "text": "Presentation" }
           ]
         }
       ]

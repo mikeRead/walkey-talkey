@@ -1,6 +1,7 @@
 idf_component_register(
     SRCS
         action_engine.c
+        air_mouse.c
         main.c
         audio_input.c
         boot_button.c
@@ -13,6 +14,7 @@ idf_component_register(
         mode_controller.c
         mouse_mode.c
         multitouch_poc.c
+        qmi8658.c
         ptt_state.c
         ui_status.c
         sd_card.c

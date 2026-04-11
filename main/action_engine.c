@@ -201,6 +201,37 @@ bool action_engine_execute_actions(const mode_action_t *actions,
             action_engine_refresh_ui(context);
             break;
 
+        case MODE_ACTION_MOUSE_ON:
+            if ((context->set_mouse_overlay != NULL)) {
+                context->set_mouse_overlay(true,
+                                           action->data.mouse_overlay.mouse_type,
+                                           action->data.mouse_overlay.tracking,
+                                           context->user_data);
+            }
+            break;
+
+        case MODE_ACTION_MOUSE_OFF:
+            if (context->set_mouse_overlay != NULL) {
+                context->set_mouse_overlay(false, MOUSE_MODE_TYPE_DEFAULT, false, context->user_data);
+            }
+            break;
+
+        case MODE_ACTION_MOUSE_TOGGLE: {
+            bool currently_on = (context->get_mouse_overlay != NULL) &&
+                                context->get_mouse_overlay(context->user_data);
+            if (context->set_mouse_overlay != NULL) {
+                if (currently_on) {
+                    context->set_mouse_overlay(false, MOUSE_MODE_TYPE_DEFAULT, false, context->user_data);
+                } else {
+                    context->set_mouse_overlay(true,
+                                               action->data.mouse_overlay.mouse_type,
+                                               action->data.mouse_overlay.tracking,
+                                               context->user_data);
+                }
+            }
+            break;
+        }
+
         case MODE_ACTION_NOOP:
             break;
         }

@@ -4,7 +4,7 @@
 
 # WalKEY-TalKEY
 
-It's a push-to-talk microphone array, macro keyboard, mouse, touchpad (with gesture support), thumb drive, ALL AT ONCE -- crammed into one tiny [AMOLED touchscreen](https://www.amazon.com/dp/B0F7XTJ7JW) that sits right next to your keyboard and talks to your computer over USB. Batteries not included.
+It's a push-to-talk microphone array, macro keyboard, air mouse, gesture touch support, thumb drive, ALL AT ONCE -- crammed into one tiny [AMOLED touchscreen](https://www.amazon.com/dp/B0F7XTJ7JW) that sits right next to your keyboard and talks to your computer over USB. Batteries not included.
 
 Swipe it. Tap it. Hold it. Every gesture fires off whatever you tell it to -- keyboard shortcuts, media controls, multi-step macros, you name it. Smash the Menu button to swap modes on the fly. Or just have your AI of choice configure it through its own [MCP server](https://www.npmjs.com/package/walkey-talkey-mcp) -- no code required. Prefer a hands-on approach? There's a built-in Wi-Fi web portal and [REST API](docs/REST_API.md) too.
 
@@ -17,11 +17,13 @@ Swipe it. Tap it. Hold it. Every gesture fires off whatever you tell it to -- ke
 | **Macro keyboard**   | Swipe or tap the touchscreen to send keyboard shortcuts, key combos, or multi-step macros to your PC                      |
 | **Push-to-talk mic** | Hold your finger on the screen to activate the built-in microphone -- release to mute. Great for dictation and voice chat |
 | **Media controller** | Switch to Media mode and control play/pause, skip tracks, and volume with swipes                                          |
-| **Mouse / touchpad** | Use the touchscreen as a mouse -- swipe to move the cursor, tap to click                                                  |
+| **Air mouse**        | Tilt the device to move your cursor using the built-in 6-axis IMU gyroscope -- no surface needed. Tap to click, hold to drag |
+| **Touch trackpad**   | Use the touchscreen as a traditional trackpad -- drag to move the cursor, tap to click, tap-drag for drag-and-drop        |
+| **Per-mode mouse**   | Any mode can activate mouse control on demand (e.g. hold for air mouse in Presentation mode) without leaving the mode     |
 | **Thumb drive**      | The device also shows up as a USB storage drive for quick file transfers                                                  |
 | **Mode switcher**    | Hold the BOOT button and swipe to cycle through modes on the fly                                                          |
 
-Your computer sees it as a standard USB keyboard, microphone, and storage device. No special drivers needed.
+Your computer sees it as a standard USB keyboard, mouse, microphone, and storage device. No special drivers needed.
 
 ## Hardware
 
@@ -33,14 +35,15 @@ The board features a 466x466 pixel AMOLED display, capacitive touch, dual digita
 
 ## Built-In Modes
 
-The device ships with four modes, and that you can add, remove or modify as many custom modes as you want:
+The device ships with five modes, and you can add, remove, or modify as many custom modes as you want:
 
 | Mode             | What It Does                                                                                                                  |
 | ---------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | **Cursor**       | Designed for AI coding assistants. Hold to dictate, tap to accept, swipe for shortcuts like new chat, submit, and clear field |
-| **Presentation** | Control slideshows. Swipe left/right for next/previous slide, tap to advance, double-tap to black the screen                  |
+| **Presentation** | Control slideshows. Swipe for next/previous slide, tap to advance, double-tap to black the screen, hold for air mouse cursor  |
 | **Media**        | Tap for play/pause, swipe left/right to skip tracks, swipe up/down for volume                                                 |
 | **Navigation**   | Swipe in any direction to send arrow keys. Tap or double-tap for Escape                                                       |
+| **Mouse**        | Built-in mode that turns the device into a full USB mouse. Choose air mouse (gyro) or touch trackpad in config                |
 
 To switch modes, hold the BOOT button on the side of the device and swipe left or right.
 

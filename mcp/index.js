@@ -113,7 +113,7 @@ server.registerTool(
 
 server.registerTool(
   "walkey_list_modes",
-  { description: "List all modes including the built-in mouse mode. Returns array of {id, label, cycleOrder, bindingCount} for each mode." },
+  { description: "List all modes. Returns array of {id, label, cycleOrder, bindingCount} for each mode. The 'mouse' mode is built-in (builtIn:true) and cannot be edited or deleted via walkey_set_mode/walkey_delete_mode. To configure mouse behavior (air mouse vs touch mouse, sensitivity, etc.), use walkey_set_defaults instead." },
   async () => {
     try {
       const data = await apiGet("/api/modes");
@@ -223,7 +223,7 @@ server.registerTool(
     description: `Add or replace a single binding in a mode. Identifies by input+trigger pair. Reads the mode, patches the binding, writes back.
 
 BINDING STRUCTURE: {input:"<input>", trigger:"<trigger>", actions:[<action>, ...]}
-  input is one of: touch, boot_button, encoder, usb_host_key, timer, imu
+  input is one of: touch, boot_button (only these two are active in current firmware; encoder, usb_host_key, timer, imu are reserved for future use)
 
 TRIGGERS (one per binding):
   Touch: tap, double_tap, long_press, hold_start, hold_end, swipe_up, swipe_down, swipe_left, swipe_right
@@ -247,6 +247,13 @@ ACTION TYPES (one or more per binding):
   Mode switching:
     set_mode        - switch to a named mode:     {type:"set_mode", mode:"<mode_id>"}
     cycle_mode      - cycle to the next mode:     {type:"cycle_mode"}
+  Mouse overlay (use mouse within any mode without switching to dedicated Mouse mode):
+    mouse_on        - activate mouse overlay:     {type:"mouse_on"}
+                      optional: mouseType ("airMouse" or "touchMouse"), tracking (bool, default true)
+                      tracking:true (default) = cursor moves immediately, no click on release
+                      tracking:false = full gesture handler (long-press=cursor, tap=click, etc.)
+    mouse_off       - deactivate mouse overlay:   {type:"mouse_off"} -- stops tracking, releases buttons
+    mouse_toggle    - toggle overlay on/off:       {type:"mouse_toggle"} -- same optional fields as mouse_on
   Other:
     noop            - do nothing:                 {type:"noop"}
 
@@ -328,7 +335,28 @@ server.registerTool(
 
 server.registerTool(
   "walkey_get_defaults",
-  { description: "Retrieve touch gesture timing defaults. Returns {touch:{holdMs, doubleTapMs, swipeMinDistance}}." },
+  { description: `Retrieve all defaults: touch timing, mouse backend selection, and per-backend mouse config.
+
+RESPONSE SHAPE:
+  touch: {holdMs, doubleTapMs, swipeMinDistance}
+  defaultMouse: "airMouse" | "touchMouse"
+  airMouse: {sensitivity, deadZoneDps, easingExponent, maxDps, emaAlpha, rewindDepth, rewindDecay, calibrationSamples}
+  touchMouse: {sensitivity, moveThresholdPx, tapDragWindowMs}
+
+AIR MOUSE FIELDS (all optional, defaults shown):
+  sensitivity (1.0)        - cursor speed multiplier
+  deadZoneDps (6.0)        - gyro degrees/sec below which input is ignored
+  easingExponent (1.25)    - power curve: 1.0=linear, higher=more precision at low speed
+  maxDps (300.0)           - gyro saturation point in degrees/sec
+  emaAlpha (0.35)          - EMA smoothing 0..1; lower=smoother but laggier
+  rewindDepth (12)         - samples rewound on release to cancel jitter (max 16)
+  rewindDecay (0.7)        - exponential decay for rewind weighting
+  calibrationSamples (128) - IMU samples averaged at startup for drift compensation
+
+TOUCH MOUSE FIELDS (all optional, defaults shown):
+  sensitivity (1.0)        - cursor speed multiplier
+  moveThresholdPx (5)      - min pixels before cursor starts tracking
+  tapDragWindowMs (180)    - ms window after tap to detect tap-and-drag` },
   async () => {
     try {
       const data = await apiGet("/api/defaults");
@@ -342,11 +370,19 @@ server.registerTool(
 server.registerTool(
   "walkey_set_defaults",
   {
-    description: "Update touch gesture timing defaults. Merge semantics: only provided fields change.",
+    description: `Update defaults. Merge semantics: only provided fields change.
+
+SUPPORTED FIELDS:
+  touch:        {holdMs, doubleTapMs, swipeMinDistance}
+  defaultMouse: "airMouse" | "touchMouse" - which mouse backend is active
+  airMouse:     {sensitivity, deadZoneDps, easingExponent, maxDps, emaAlpha, rewindDepth, rewindDecay, calibrationSamples}
+  touchMouse:   {sensitivity, moveThresholdPx, tapDragWindowMs}
+
+All airMouse/touchMouse fields are optional; omitted fields keep current values.`,
     inputSchema: {
       defaults: z
         .record(z.any())
-        .describe("Defaults to update: {touch:{holdMs:500, doubleTapMs:300, swipeMinDistance:50}}"),
+        .describe("Defaults to update, e.g. {touch:{holdMs:500}}, {defaultMouse:'touchMouse'}, {airMouse:{sensitivity:1.5, deadZoneDps:8.0}}, {touchMouse:{moveThresholdPx:10}}"),
     },
   },
   async ({ defaults }) => {
@@ -377,7 +413,7 @@ server.registerTool(
 server.registerTool(
   "walkey_set_active_mode",
   {
-    description: "Switch the device to a different mode. Use walkey_list_modes to discover available mode ids. 'mouse' is a built-in mode that turns the touchscreen into a trackpad.",
+    description: "Switch the device to a different mode. Use walkey_list_modes to discover available mode ids. 'mouse' is a built-in mode that uses either gyro-based air mouse or touch trackpad depending on the defaultMouse setting in defaults (configurable via walkey_set_defaults).",
     inputSchema: { mode_id: z.string().describe("The mode id to switch to (includes built-in 'mouse' mode)") },
   },
   async ({ mode_id }) => {
@@ -409,7 +445,7 @@ server.registerTool(
 
 server.registerTool(
   "walkey_get_global_bindings",
-  { description: "Retrieve global bindings that apply across all modes (e.g. BOOT button long-press for recovery)." },
+  { description: "Retrieve global bindings that apply across all modes. Default: BOOT button press enters boot mode overlay, release exits it. These ensure mode-switching always works regardless of active mode." },
   async () => {
     try {
       const data = await apiGet("/api/global-bindings");
@@ -425,9 +461,9 @@ server.registerTool(
 server.registerTool(
   "walkey_set_config",
   {
-    description: "Replace the ENTIRE device configuration. DESTRUCTIVE: overwrites all modes, Wi-Fi, defaults. Prefer per-mode/per-section tools. Read current config first with walkey_get_config.",
+    description: "Replace the ENTIRE device configuration. DESTRUCTIVE: overwrites all modes, Wi-Fi, defaults. Prefer per-mode/per-section tools (walkey_set_mode, walkey_set_defaults, etc.). Read current config first with walkey_get_config.",
     inputSchema: {
-      config: z.record(z.any()).describe("Complete configuration JSON object"),
+      config: z.record(z.any()).describe("Complete config JSON. Required keys: version (1), globalBindings, bootMode, modes. Optional: activeMode, defaults, wifi. See walkey_get_config for current shape."),
     },
   },
   async ({ config }) => {

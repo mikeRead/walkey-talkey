@@ -134,8 +134,22 @@ typedef enum {
     MODE_ACTION_UI_SHOW_MODE,
     MODE_ACTION_SET_MODE,
     MODE_ACTION_CYCLE_MODE,
+    MODE_ACTION_MOUSE_ON,
+    MODE_ACTION_MOUSE_OFF,
+    MODE_ACTION_MOUSE_TOGGLE,
     MODE_ACTION_NOOP,
 } mode_action_type_t;
+
+typedef enum {
+    MOUSE_MODE_TYPE_TOUCH = 0,
+    MOUSE_MODE_TYPE_AIR,
+    MOUSE_MODE_TYPE_DEFAULT = 0xFF,
+} mouse_mode_type_t;
+
+typedef struct {
+    mouse_mode_type_t mouse_type;
+    bool tracking;
+} mode_mouse_overlay_t;
 
 typedef struct {
     mode_hid_report_kind_t report_kind;
@@ -154,6 +168,7 @@ typedef struct {
         const char *text;
         mode_id_t mode;
         mode_cycle_direction_t direction;
+        mode_mouse_overlay_t mouse_overlay;
     } data;
 } mode_action_t;
 
@@ -171,7 +186,27 @@ typedef struct {
 } mode_touch_defaults_t;
 
 typedef struct {
+    float sensitivity;
+    float dead_zone_dps;
+    float easing_exponent;
+    float max_dps;
+    float ema_alpha;
+    uint32_t rewind_depth;
+    float rewind_decay;
+    uint32_t calibration_samples;
+} air_mouse_config_t;
+
+typedef struct {
+    float sensitivity;
+    uint16_t move_threshold_px;
+    uint32_t tap_drag_window_ms;
+} touch_mouse_config_t;
+
+typedef struct {
     mode_touch_defaults_t touch;
+    mouse_mode_type_t default_mouse;
+    air_mouse_config_t air_mouse;
+    touch_mouse_config_t touch_mouse;
 } mode_defaults_t;
 
 typedef struct {

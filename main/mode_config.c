@@ -50,6 +50,22 @@ static const char *s_builtin_mode_config_json =
     "      \"holdMs\": 400,\n"
     "      \"doubleTapMs\": 350,\n"
     "      \"swipeMinDistance\": 40\n"
+    "    },\n"
+    "    \"defaultMouse\": \"airMouse\",\n"
+    "    \"airMouse\": {\n"
+    "      \"sensitivity\": 0.15,\n"
+    "      \"deadZoneDps\": 6.0,\n"
+    "      \"easingExponent\": 1.25,\n"
+    "      \"maxDps\": 512.0,\n"
+    "      \"emaAlpha\": 0.35,\n"
+    "      \"rewindDepth\": 12,\n"
+    "      \"rewindDecay\": 0.7,\n"
+    "      \"calibrationSamples\": 50\n"
+    "    },\n"
+    "    \"touchMouse\": {\n"
+    "      \"sensitivity\": 1.0,\n"
+    "      \"moveThresholdPx\": 10,\n"
+    "      \"tapDragWindowMs\": 200\n"
     "    }\n"
     "  },\n"
     "  \"wifi\": {\n"
@@ -744,6 +760,22 @@ static const mode_config_t s_failsafe_mode_config = {
             .hold_ms = 400,
             .double_tap_ms = 350,
             .swipe_min_distance = 40,
+        },
+        .default_mouse = MOUSE_MODE_TYPE_AIR,
+        .air_mouse = {
+            .sensitivity = 0.15f,
+            .dead_zone_dps = 6.0f,
+            .easing_exponent = 1.25f,
+            .max_dps = 512.0f,
+            .ema_alpha = 0.35f,
+            .rewind_depth = 12,
+            .rewind_decay = 0.7f,
+            .calibration_samples = 50,
+        },
+        .touch_mouse = {
+            .sensitivity = 1.0f,
+            .move_threshold_px = 10,
+            .tap_drag_window_ms = 200,
         },
     },
     .wifi = {

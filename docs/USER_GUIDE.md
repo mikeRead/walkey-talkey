@@ -111,6 +111,22 @@ A practical top-level config looks like this:
       "holdMs": 400,
       "doubleTapMs": 350,
       "swipeMinDistance": 40
+    },
+    "defaultMouse": "airMouse",
+    "airMouse": {
+      "sensitivity": 1.0,
+      "deadZoneDps": 6.0,
+      "easingExponent": 1.25,
+      "maxDps": 300.0,
+      "emaAlpha": 0.35,
+      "rewindDepth": 12,
+      "rewindDecay": 0.7,
+      "calibrationSamples": 128
+    },
+    "touchMouse": {
+      "sensitivity": 1.0,
+      "moveThresholdPx": 5,
+      "tapDragWindowMs": 180
     }
   },
   "globalBindings": [
@@ -165,8 +181,9 @@ A practical top-level config looks like this:
 
 ### `defaults`
 
-- Shared timing and threshold settings live here.
-- Right now the most important group is `defaults.touch`.
+- Shared timing, threshold, and mouse configuration settings live here.
+- `defaults.touch` controls gesture timing.
+- `defaults.defaultMouse`, `defaults.airMouse`, and `defaults.touchMouse` control mouse backend selection and tuning.
 
 ### `globalBindings`
 
@@ -219,6 +236,69 @@ Practical tuning advice:
 - lower `doubleTapMs` if normal taps feel delayed
 - raise `swipeMinDistance` if accidental swipes happen
 - lower `swipeMinDistance` if swipes feel too hard to trigger
+
+### Mouse Configuration
+
+The device supports two mouse backends that turn the touchpad into a USB HID mouse:
+
+- **Air Mouse** (`airMouse`) -- uses the built-in gyroscope (IMU). Touch the pad to start moving the cursor by tilting the device. Gestures like tap, double-tap, long-press, and multi-touch produce mouse clicks.
+- **Touch Mouse** (`touchMouse`) -- uses the touchpad as a traditional trackpad. Drag to move the cursor, tap for clicks.
+
+Set which backend is active with `defaultMouse`:
+
+```json
+"defaults": {
+  "defaultMouse": "airMouse"
+}
+```
+
+Valid values are `"airMouse"` and `"touchMouse"`.
+
+#### Air Mouse Settings
+
+All fields are optional. Omitted fields use firmware defaults.
+
+```json
+"airMouse": {
+  "sensitivity": 1.0,
+  "deadZoneDps": 6.0,
+  "easingExponent": 1.25,
+  "maxDps": 300.0,
+  "emaAlpha": 0.35,
+  "rewindDepth": 12,
+  "rewindDecay": 0.7,
+  "calibrationSamples": 128
+}
+```
+
+What each setting does:
+
+- `sensitivity` -- overall cursor speed multiplier. Raise for faster movement, lower for more precision.
+- `deadZoneDps` -- minimum gyro speed (degrees/second) to register movement. Raise if the cursor drifts when still.
+- `easingExponent` -- controls the acceleration curve. Lower values (closer to 1.0) make movement more linear. Higher values emphasize slow-speed precision and fast-speed responsiveness.
+- `maxDps` -- the gyro speed at which cursor velocity tops out.
+- `emaAlpha` -- smoothing strength (0 to 1). Lower values give smoother but laggier cursor movement.
+- `rewindDepth` -- how many recent movement samples are rewound when you lift your finger, to cancel accidental jitter. Max 16.
+- `rewindDecay` -- how much weight recent samples get during rewind. Lower means more aggressive jitter compensation.
+- `calibrationSamples` -- how many IMU readings are averaged at startup for drift compensation.
+
+#### Touch Mouse Settings
+
+All fields are optional. Omitted fields use firmware defaults.
+
+```json
+"touchMouse": {
+  "sensitivity": 1.0,
+  "moveThresholdPx": 5,
+  "tapDragWindowMs": 180
+}
+```
+
+What each setting does:
+
+- `sensitivity` -- cursor speed multiplier. Raise for faster tracking.
+- `moveThresholdPx` -- minimum pixels of finger movement before the cursor starts tracking. Prevents accidental movement during taps.
+- `tapDragWindowMs` -- time window (ms) after a tap to detect a tap-and-drag gesture.
 
 ## Inputs
 
@@ -293,6 +373,9 @@ Common action types:
 - `ui_show_mode`
 - `set_mode`
 - `cycle_mode`
+- `mouse_on`
+- `mouse_off`
+- `mouse_toggle`
 - `noop`
 
 ### Keyboard Actions
@@ -444,6 +527,49 @@ Examples:
 ```json
 { "type": "mic_gate_toggle" }
 ```
+
+### Per-Mode Mouse Actions
+
+You can activate mouse functionality (air mouse or touch trackpad) as an overlay on any mode without switching to the dedicated Mouse mode. This is useful for things like presentation mode where you want cursor control on demand.
+
+**`mouse_on`** -- activates the mouse overlay. By default, cursor tracking starts immediately and releasing the touch produces no click.
+
+```json
+{ "type": "mouse_on" }
+```
+
+Optional fields:
+- `mouseType`: `"airMouse"` or `"touchMouse"` to override the default backend.
+- `tracking`: `true` (default) for immediate cursor movement, `false` for full gesture support (long-press = cursor, tap = click, etc.).
+
+**`mouse_off`** -- deactivates the mouse overlay and returns touch to normal bindings.
+
+```json
+{ "type": "mouse_off" }
+```
+
+**`mouse_toggle`** -- toggles the overlay on or off. Same optional fields as `mouse_on`.
+
+```json
+{ "type": "mouse_toggle" }
+```
+
+**Hold-to-mouse example** (presentation mode):
+
+```json
+{
+  "input": "touch",
+  "trigger": "hold_start",
+  "actions": [{ "type": "mouse_on" }, { "type": "ui_hint", "text": "Air mouse" }]
+},
+{
+  "input": "touch",
+  "trigger": "hold_end",
+  "actions": [{ "type": "mouse_off" }, { "type": "ui_hint", "text": "Presentation" }]
+}
+```
+
+While the overlay is active, taps and swipes go to the mouse gesture handler. The overlay auto-deactivates when you switch modes.
 
 ### No-Op Action
 

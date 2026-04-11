@@ -27,8 +27,8 @@ All request and response bodies are JSON (`application/json`) unless otherwise n
 | DELETE | `/api/mode?id=X` | Delete a mode |
 | GET | `/api/wifi` | Read Wi-Fi config |
 | PUT | `/api/wifi` | Update Wi-Fi config (merge) |
-| GET | `/api/defaults` | Read touch defaults |
-| PUT | `/api/defaults` | Update touch defaults (merge) |
+| GET | `/api/defaults` | Read defaults (touch, mouse) |
+| PUT | `/api/defaults` | Update defaults (touch, mouse; merge) |
 | PUT | `/api/active-mode` | Set the active mode |
 | GET | `/api/boot-mode` | Read boot-mode definition |
 | GET | `/api/global-bindings` | Read global bindings |
@@ -365,11 +365,11 @@ Wi-Fi is reapplied immediately after save. If you change the STA credentials, th
 
 ---
 
-## Touch Defaults Endpoints
+## Defaults Endpoints
 
 ### `GET /api/defaults`
 
-Read the current touch timing and threshold defaults.
+Read the current defaults for touch timing, mouse mode selection, and per-backend mouse configuration.
 
 **Response:**
 
@@ -379,13 +379,29 @@ Read the current touch timing and threshold defaults.
     "holdMs": 400,
     "doubleTapMs": 350,
     "swipeMinDistance": 40
+  },
+  "defaultMouse": "airMouse",
+  "airMouse": {
+    "sensitivity": 1.0,
+    "deadZoneDps": 6.0,
+    "easingExponent": 1.25,
+    "maxDps": 300.0,
+    "emaAlpha": 0.35,
+    "rewindDepth": 12,
+    "rewindDecay": 0.7,
+    "calibrationSamples": 128
+  },
+  "touchMouse": {
+    "sensitivity": 1.0,
+    "moveThresholdPx": 5,
+    "tapDragWindowMs": 180
   }
 }
 ```
 
 ### `PUT /api/defaults`
 
-Update touch defaults. Uses **merge** semantics.
+Update defaults. Uses **merge** semantics -- only the fields you send are overwritten; everything else is preserved. Works for `touch`, `defaultMouse`, `airMouse`, and `touchMouse` fields.
 
 **Request body (example -- adjust hold threshold):**
 
@@ -393,6 +409,17 @@ Update touch defaults. Uses **merge** semantics.
 {
   "touch": {
     "holdMs": 500
+  }
+}
+```
+
+**Request body (example -- switch to touch mouse and tweak air sensitivity):**
+
+```json
+{
+  "defaultMouse": "touchMouse",
+  "airMouse": {
+    "sensitivity": 1.5
   }
 }
 ```

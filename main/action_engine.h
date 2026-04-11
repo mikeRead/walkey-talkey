@@ -15,6 +15,9 @@ typedef struct {
     void (*set_hint_text)(const char *text, void *user_data);
     void (*reset_active_outputs)(void *user_data);
     void (*refresh_ui)(void *user_data);
+    bool (*get_mouse_overlay)(void *user_data);
+    void (*set_mouse_overlay)(bool enabled, mouse_mode_type_t type,
+                              bool immediate_tracking, void *user_data);
     void *user_data;
 } action_engine_context_t;
 

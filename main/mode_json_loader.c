@@ -12,6 +12,21 @@
 #define MODE_JSON_DEFAULT_HOLD_MS 400
 #define MODE_JSON_DEFAULT_DOUBLE_TAP_MS 350
 #define MODE_JSON_DEFAULT_SWIPE_MIN_DISTANCE 40
+#define MODE_JSON_DEFAULT_MOUSE_TYPE MOUSE_MODE_TYPE_AIR
+
+#define MODE_JSON_DEFAULT_AIR_SENSITIVITY     0.15f
+#define MODE_JSON_DEFAULT_AIR_DEAD_ZONE_DPS   6.0f
+#define MODE_JSON_DEFAULT_AIR_EASING_EXPONENT 1.25f
+#define MODE_JSON_DEFAULT_AIR_MAX_DPS         512.0f
+#define MODE_JSON_DEFAULT_AIR_EMA_ALPHA       0.35f
+#define MODE_JSON_DEFAULT_AIR_REWIND_DEPTH    12
+#define MODE_JSON_DEFAULT_AIR_REWIND_DECAY    0.7f
+#define MODE_JSON_DEFAULT_AIR_CALIBRATION_SAMPLES 50
+
+#define MODE_JSON_DEFAULT_TOUCH_SENSITIVITY       1.0f
+#define MODE_JSON_DEFAULT_TOUCH_MOVE_THRESHOLD_PX 10
+#define MODE_JSON_DEFAULT_TOUCH_TAP_DRAG_WINDOW_MS 200
+
 #define MODE_JSON_DEFAULT_WIFI_STA_SSID "YourNetworkName"
 #define MODE_JSON_DEFAULT_WIFI_STA_PASSWORD "YourPassword"
 #define MODE_JSON_DEFAULT_WIFI_AP_SSID "walkey-talkey"
@@ -23,6 +38,7 @@ typedef enum {
     MODE_JSON_VALUE_NULL = 0,
     MODE_JSON_VALUE_BOOL,
     MODE_JSON_VALUE_NUMBER,
+    MODE_JSON_VALUE_FLOAT,
     MODE_JSON_VALUE_STRING,
     MODE_JSON_VALUE_ARRAY,
     MODE_JSON_VALUE_OBJECT,
@@ -40,6 +56,7 @@ struct mode_json_value {
     union {
         bool boolean;
         long long number;
+        double float_number;
         char *string;
         struct {
             mode_json_value_t **items;
@@ -207,6 +224,7 @@ static void mode_json_free_value(mode_json_value_t *value)
     case MODE_JSON_VALUE_NULL:
     case MODE_JSON_VALUE_BOOL:
     case MODE_JSON_VALUE_NUMBER:
+    case MODE_JSON_VALUE_FLOAT:
     default:
         break;
     }
@@ -379,6 +397,21 @@ static bool mode_json_builder_append_bool(mode_json_string_builder_t *builder, b
     return mode_json_builder_append_text(builder, value ? "true" : "false");
 }
 
+static bool mode_json_builder_append_float(mode_json_string_builder_t *builder, double value)
+{
+    char buffer[32];
+    (void)snprintf(buffer, sizeof(buffer), "%g", value);
+    if (strchr(buffer, '.') == NULL && strchr(buffer, 'e') == NULL && strchr(buffer, 'E') == NULL) {
+        size_t len = strlen(buffer);
+        if (len + 2 < sizeof(buffer)) {
+            buffer[len] = '.';
+            buffer[len + 1] = '0';
+            buffer[len + 2] = '\0';
+        }
+    }
+    return mode_json_builder_append_text(builder, buffer);
+}
+
 static bool mode_json_parse_hex4(mode_json_parser_t *parser, unsigned int *value_out)
 {
     unsigned int value = 0;
@@ -499,12 +532,26 @@ static mode_json_value_t *mode_json_parse_number(mode_json_parser_t *parser)
         parser->cursor++;
     }
 
-    if ((*parser->cursor == '.') || (*parser->cursor == 'e') || (*parser->cursor == 'E')) {
-        mode_json_fail(parser, "Only integer numbers are supported");
-        return NULL;
+    bool is_float = false;
+    if (*parser->cursor == '.') {
+        is_float = true;
+        parser->cursor++;
+        while (isdigit((unsigned char)*parser->cursor)) {
+            parser->cursor++;
+        }
+    }
+    if ((*parser->cursor == 'e') || (*parser->cursor == 'E')) {
+        is_float = true;
+        parser->cursor++;
+        if ((*parser->cursor == '+') || (*parser->cursor == '-')) {
+            parser->cursor++;
+        }
+        while (isdigit((unsigned char)*parser->cursor)) {
+            parser->cursor++;
+        }
     }
 
-    char buffer[32];
+    char buffer[64];
     size_t length = (size_t)(parser->cursor - start);
     if (length >= sizeof(buffer)) {
         mode_json_fail(parser, "Number too long");
@@ -513,6 +560,24 @@ static mode_json_value_t *mode_json_parse_number(mode_json_parser_t *parser)
 
     memcpy(buffer, start, length);
     buffer[length] = '\0';
+
+    if (is_float) {
+        char *end_ptr = NULL;
+        double float_number = strtod(buffer, &end_ptr);
+        if ((end_ptr == NULL) || (*end_ptr != '\0')) {
+            mode_json_fail(parser, "Invalid float number");
+            return NULL;
+        }
+
+        mode_json_value_t *value = mode_json_new_value(MODE_JSON_VALUE_FLOAT);
+        if (value == NULL) {
+            mode_json_fail(parser, "Out of memory");
+            return NULL;
+        }
+
+        value->data.float_number = float_number;
+        return value;
+    }
 
     char *end_ptr = NULL;
     long long number = strtoll(buffer, &end_ptr, 10);
@@ -879,6 +944,15 @@ static bool mode_json_get_u32_optional(const mode_json_value_t *object_value,
         return false;
     }
 
+    if (value->type == MODE_JSON_VALUE_FLOAT) {
+        double d = value->data.float_number;
+        if (d < 0.0 || d > (double)UINT32_MAX || d != (double)(uint32_t)d) {
+            return mode_json_fail_compile(error, "Expected non-negative integer field");
+        }
+        *out_value = (uint32_t)d;
+        return true;
+    }
+
     if ((value->type != MODE_JSON_VALUE_NUMBER) || (value->data.number < 0)) {
         return mode_json_fail_compile(error, "Expected non-negative integer field");
     }
@@ -903,6 +977,29 @@ static bool mode_json_get_u16_optional(const mode_json_value_t *object_value,
 
     *out_value = (uint16_t)value;
     return true;
+}
+
+static bool mode_json_get_float_optional(const mode_json_value_t *object_value,
+                                         const char *key,
+                                         float *out_value,
+                                         mode_json_error_t *error)
+{
+    const mode_json_value_t *value = mode_json_object_get(object_value, key);
+    if (value == NULL) {
+        return false;
+    }
+
+    if (value->type == MODE_JSON_VALUE_FLOAT) {
+        *out_value = (float)value->data.float_number;
+        return true;
+    }
+
+    if (value->type == MODE_JSON_VALUE_NUMBER) {
+        *out_value = (float)value->data.number;
+        return true;
+    }
+
+    return mode_json_fail_compile(error, "Expected numeric field");
 }
 
 static bool mode_json_push_pending_mode_ref(mode_json_pending_mode_refs_t *pending_refs,
@@ -1154,7 +1251,8 @@ static bool mode_json_parse_actions(const mode_json_value_t *actions_value,
 
         static const char *const allowed_action_keys[] = {
             "type", "key", "modifier", "modifiers", "duration_ms", "enabled",
-            "text", "mode", "direction", "usage", "report", "usagePage"
+            "text", "mode", "direction", "usage", "report", "usagePage",
+            "mouseType", "tracking"
         };
         if (!mode_json_validate_object_keys(action_value,
                                             allowed_action_keys,
@@ -1339,6 +1437,30 @@ static bool mode_json_parse_actions(const mode_json_value_t *actions_value,
                 return mode_json_fail_compile_at(error, action_path, "Invalid cycle_mode direction");
             }
             action->type = MODE_ACTION_CYCLE_MODE;
+        } else if (mode_json_equals_ignore_case(action_type, "mouse_on") ||
+                   mode_json_equals_ignore_case(action_type, "mouse_toggle")) {
+            bool is_toggle = mode_json_equals_ignore_case(action_type, "mouse_toggle");
+            action->type = is_toggle ? MODE_ACTION_MOUSE_TOGGLE : MODE_ACTION_MOUSE_ON;
+            action->data.mouse_overlay.mouse_type = MOUSE_MODE_TYPE_DEFAULT;
+            action->data.mouse_overlay.tracking = true;
+            const char *mt_str = NULL;
+            if (mode_json_get_string_optional(action_value, "mouseType", &mt_str) && (mt_str != NULL)) {
+                if (mode_json_equals_ignore_case(mt_str, "airMouse")) {
+                    action->data.mouse_overlay.mouse_type = MOUSE_MODE_TYPE_AIR;
+                } else if (mode_json_equals_ignore_case(mt_str, "touchMouse")) {
+                    action->data.mouse_overlay.mouse_type = MOUSE_MODE_TYPE_TOUCH;
+                } else {
+                    mode_json_free_actions(actions, action_count);
+                    return mode_json_fail_compile_at(error, action_path,
+                        "mouseType must be \"airMouse\" or \"touchMouse\"");
+                }
+            }
+            bool tracking_val = true;
+            if (mode_json_get_bool_optional(action_value, "tracking", &tracking_val)) {
+                action->data.mouse_overlay.tracking = tracking_val;
+            }
+        } else if (mode_json_equals_ignore_case(action_type, "mouse_off")) {
+            action->type = MODE_ACTION_MOUSE_OFF;
         } else if (mode_json_equals_ignore_case(action_type, "noop")) {
             action->type = MODE_ACTION_NOOP;
         } else {
@@ -1839,6 +1961,22 @@ static bool mode_json_compile_config(const mode_json_value_t *root_value,
     config->defaults.touch.hold_ms = MODE_JSON_DEFAULT_HOLD_MS;
     config->defaults.touch.double_tap_ms = MODE_JSON_DEFAULT_DOUBLE_TAP_MS;
     config->defaults.touch.swipe_min_distance = MODE_JSON_DEFAULT_SWIPE_MIN_DISTANCE;
+    config->defaults.default_mouse = MODE_JSON_DEFAULT_MOUSE_TYPE;
+    config->defaults.air_mouse = (air_mouse_config_t){
+        .sensitivity = MODE_JSON_DEFAULT_AIR_SENSITIVITY,
+        .dead_zone_dps = MODE_JSON_DEFAULT_AIR_DEAD_ZONE_DPS,
+        .easing_exponent = MODE_JSON_DEFAULT_AIR_EASING_EXPONENT,
+        .max_dps = MODE_JSON_DEFAULT_AIR_MAX_DPS,
+        .ema_alpha = MODE_JSON_DEFAULT_AIR_EMA_ALPHA,
+        .rewind_depth = MODE_JSON_DEFAULT_AIR_REWIND_DEPTH,
+        .rewind_decay = MODE_JSON_DEFAULT_AIR_REWIND_DECAY,
+        .calibration_samples = MODE_JSON_DEFAULT_AIR_CALIBRATION_SAMPLES,
+    };
+    config->defaults.touch_mouse = (touch_mouse_config_t){
+        .sensitivity = MODE_JSON_DEFAULT_TOUCH_SENSITIVITY,
+        .move_threshold_px = MODE_JSON_DEFAULT_TOUCH_MOVE_THRESHOLD_PX,
+        .tap_drag_window_ms = MODE_JSON_DEFAULT_TOUCH_TAP_DRAG_WINDOW_MS,
+    };
     config->wifi.ap.ssid = mode_json_strdup(MODE_JSON_DEFAULT_WIFI_AP_SSID);
     config->wifi.ap.password = mode_json_strdup(MODE_JSON_DEFAULT_WIFI_AP_PASSWORD);
     config->wifi.hostname = mode_json_strdup(MODE_JSON_DEFAULT_WIFI_HOSTNAME);
@@ -1872,7 +2010,7 @@ static bool mode_json_compile_config(const mode_json_value_t *root_value,
     }
     if (defaults_value != NULL) {
         static const char *const allowed_defaults_keys[] = {
-            "touch"
+            "touch", "mouseMode", "defaultMouse", "airMouse", "touchMouse"
         };
         if (!mode_json_validate_object_keys(defaults_value,
                                             allowed_defaults_keys,
@@ -1920,6 +2058,89 @@ static bool mode_json_compile_config(const mode_json_value_t *root_value,
                 free(config);
                 return false;
             }
+        }
+
+        /* defaultMouse selector -- new key takes priority, old "mouseMode" is backward compat */
+        const char *default_mouse_text = NULL;
+        if (mode_json_get_string_optional(defaults_value, "defaultMouse", &default_mouse_text) && (default_mouse_text != NULL)) {
+            if (mode_json_equals_ignore_case(default_mouse_text, "touchMouse")) {
+                config->defaults.default_mouse = MOUSE_MODE_TYPE_TOUCH;
+            } else if (mode_json_equals_ignore_case(default_mouse_text, "airMouse")) {
+                config->defaults.default_mouse = MOUSE_MODE_TYPE_AIR;
+            } else {
+                mode_json_free_wifi_config(&config->wifi);
+                free(config);
+                return mode_json_fail_compile(error, "defaults.defaultMouse must be \"airMouse\" or \"touchMouse\"");
+            }
+        } else {
+            const char *mouse_mode_text = NULL;
+            if (mode_json_get_string_optional(defaults_value, "mouseMode", &mouse_mode_text) && (mouse_mode_text != NULL)) {
+                if (mode_json_equals_ignore_case(mouse_mode_text, "touch")) {
+                    config->defaults.default_mouse = MOUSE_MODE_TYPE_TOUCH;
+                } else if (mode_json_equals_ignore_case(mouse_mode_text, "air")) {
+                    config->defaults.default_mouse = MOUSE_MODE_TYPE_AIR;
+                } else {
+                    mode_json_free_wifi_config(&config->wifi);
+                    free(config);
+                    return mode_json_fail_compile(error, "defaults.mouseMode must be \"touch\" or \"air\"");
+                }
+            }
+        }
+
+        /* airMouse config sub-object */
+        const mode_json_value_t *air_value = mode_json_object_get(defaults_value, "airMouse");
+        if ((air_value != NULL) && (air_value->type != MODE_JSON_VALUE_OBJECT)) {
+            mode_json_free_wifi_config(&config->wifi);
+            free(config);
+            return mode_json_fail_compile(error, "defaults.airMouse must be an object");
+        }
+        if (air_value != NULL) {
+            static const char *const allowed_air_keys[] = {
+                "sensitivity", "deadZoneDps", "easingExponent", "maxDps",
+                "emaAlpha", "rewindDepth", "rewindDecay", "calibrationSamples"
+            };
+            if (!mode_json_validate_object_keys(air_value,
+                                                allowed_air_keys,
+                                                sizeof(allowed_air_keys) / sizeof(allowed_air_keys[0]),
+                                                error,
+                                                "defaults.airMouse")) {
+                mode_json_free_wifi_config(&config->wifi);
+                free(config);
+                return false;
+            }
+            (void)mode_json_get_float_optional(air_value, "sensitivity", &config->defaults.air_mouse.sensitivity, error);
+            (void)mode_json_get_float_optional(air_value, "deadZoneDps", &config->defaults.air_mouse.dead_zone_dps, error);
+            (void)mode_json_get_float_optional(air_value, "easingExponent", &config->defaults.air_mouse.easing_exponent, error);
+            (void)mode_json_get_float_optional(air_value, "maxDps", &config->defaults.air_mouse.max_dps, error);
+            (void)mode_json_get_float_optional(air_value, "emaAlpha", &config->defaults.air_mouse.ema_alpha, error);
+            (void)mode_json_get_u32_optional(air_value, "rewindDepth", &config->defaults.air_mouse.rewind_depth, error);
+            (void)mode_json_get_float_optional(air_value, "rewindDecay", &config->defaults.air_mouse.rewind_decay, error);
+            (void)mode_json_get_u32_optional(air_value, "calibrationSamples", &config->defaults.air_mouse.calibration_samples, error);
+        }
+
+        /* touchMouse config sub-object */
+        const mode_json_value_t *tmouse_value = mode_json_object_get(defaults_value, "touchMouse");
+        if ((tmouse_value != NULL) && (tmouse_value->type != MODE_JSON_VALUE_OBJECT)) {
+            mode_json_free_wifi_config(&config->wifi);
+            free(config);
+            return mode_json_fail_compile(error, "defaults.touchMouse must be an object");
+        }
+        if (tmouse_value != NULL) {
+            static const char *const allowed_tmouse_keys[] = {
+                "sensitivity", "moveThresholdPx", "tapDragWindowMs"
+            };
+            if (!mode_json_validate_object_keys(tmouse_value,
+                                                allowed_tmouse_keys,
+                                                sizeof(allowed_tmouse_keys) / sizeof(allowed_tmouse_keys[0]),
+                                                error,
+                                                "defaults.touchMouse")) {
+                mode_json_free_wifi_config(&config->wifi);
+                free(config);
+                return false;
+            }
+            (void)mode_json_get_float_optional(tmouse_value, "sensitivity", &config->defaults.touch_mouse.sensitivity, error);
+            (void)mode_json_get_u16_optional(tmouse_value, "moveThresholdPx", &config->defaults.touch_mouse.move_threshold_px, error);
+            (void)mode_json_get_u32_optional(tmouse_value, "tapDragWindowMs", &config->defaults.touch_mouse.tap_drag_window_ms, error);
         }
     }
 
@@ -2274,6 +2495,25 @@ static bool mode_json_export_action(mode_json_string_builder_t *builder,
                                                         ? "previous"
                                                         : "next") &&
                mode_json_builder_append_char(builder, '}');
+    case MODE_ACTION_MOUSE_ON:
+    case MODE_ACTION_MOUSE_TOGGLE: {
+        const char *type_str = (action->type == MODE_ACTION_MOUSE_TOGGLE) ? "mouse_toggle" : "mouse_on";
+        if (!mode_json_builder_append_text(builder, "{\"type\":") ||
+            !mode_json_builder_append_json_string(builder, type_str)) {
+            return false;
+        }
+        if (action->data.mouse_overlay.mouse_type == MOUSE_MODE_TYPE_AIR) {
+            if (!mode_json_builder_append_text(builder, ",\"mouseType\":\"airMouse\"")) { return false; }
+        } else if (action->data.mouse_overlay.mouse_type == MOUSE_MODE_TYPE_TOUCH) {
+            if (!mode_json_builder_append_text(builder, ",\"mouseType\":\"touchMouse\"")) { return false; }
+        }
+        if (!action->data.mouse_overlay.tracking) {
+            if (!mode_json_builder_append_text(builder, ",\"tracking\":false")) { return false; }
+        }
+        return mode_json_builder_append_char(builder, '}');
+    }
+    case MODE_ACTION_MOUSE_OFF:
+        return mode_json_builder_append_text(builder, "{\"type\":\"mouse_off\"}");
     case MODE_ACTION_NOOP:
         return mode_json_builder_append_text(builder, "{\"type\":\"noop\"}");
     default:
@@ -2406,6 +2646,7 @@ char *mode_json_export_canonical_string(const mode_config_t *config)
         return NULL;
     }
 
+    const char *default_mouse_str = (config->defaults.default_mouse == MOUSE_MODE_TYPE_AIR) ? "airMouse" : "touchMouse";
     bool ok = mode_json_builder_append_char(&builder, '{') &&
               mode_json_builder_append_text(&builder, "\"version\":") &&
               mode_json_builder_append_u32(&builder, config->version) &&
@@ -2418,6 +2659,30 @@ char *mode_json_export_canonical_string(const mode_config_t *config)
               mode_json_builder_append_u32(&builder, config->defaults.touch.double_tap_ms) &&
               mode_json_builder_append_text(&builder, ",\"swipeMinDistance\":") &&
               mode_json_builder_append_u32(&builder, config->defaults.touch.swipe_min_distance) &&
+              mode_json_builder_append_text(&builder, "},\"defaultMouse\":") &&
+              mode_json_builder_append_json_string(&builder, default_mouse_str) &&
+              mode_json_builder_append_text(&builder, ",\"airMouse\":{\"sensitivity\":") &&
+              mode_json_builder_append_float(&builder, config->defaults.air_mouse.sensitivity) &&
+              mode_json_builder_append_text(&builder, ",\"deadZoneDps\":") &&
+              mode_json_builder_append_float(&builder, config->defaults.air_mouse.dead_zone_dps) &&
+              mode_json_builder_append_text(&builder, ",\"easingExponent\":") &&
+              mode_json_builder_append_float(&builder, config->defaults.air_mouse.easing_exponent) &&
+              mode_json_builder_append_text(&builder, ",\"maxDps\":") &&
+              mode_json_builder_append_float(&builder, config->defaults.air_mouse.max_dps) &&
+              mode_json_builder_append_text(&builder, ",\"emaAlpha\":") &&
+              mode_json_builder_append_float(&builder, config->defaults.air_mouse.ema_alpha) &&
+              mode_json_builder_append_text(&builder, ",\"rewindDepth\":") &&
+              mode_json_builder_append_u32(&builder, config->defaults.air_mouse.rewind_depth) &&
+              mode_json_builder_append_text(&builder, ",\"rewindDecay\":") &&
+              mode_json_builder_append_float(&builder, config->defaults.air_mouse.rewind_decay) &&
+              mode_json_builder_append_text(&builder, ",\"calibrationSamples\":") &&
+              mode_json_builder_append_u32(&builder, config->defaults.air_mouse.calibration_samples) &&
+              mode_json_builder_append_text(&builder, "},\"touchMouse\":{\"sensitivity\":") &&
+              mode_json_builder_append_float(&builder, config->defaults.touch_mouse.sensitivity) &&
+              mode_json_builder_append_text(&builder, ",\"moveThresholdPx\":") &&
+              mode_json_builder_append_u32(&builder, config->defaults.touch_mouse.move_threshold_px) &&
+              mode_json_builder_append_text(&builder, ",\"tapDragWindowMs\":") &&
+              mode_json_builder_append_u32(&builder, config->defaults.touch_mouse.tap_drag_window_ms) &&
               mode_json_builder_append_text(&builder, "}}") &&
               mode_json_export_wifi(&builder, &config->wifi) &&
               mode_json_builder_append_text(&builder, ",\"globalBindings\":") &&

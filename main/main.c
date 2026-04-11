@@ -23,6 +23,7 @@
 #include "input_router.h"
 #include "mode_config.h"
 #include "mode_controller.h"
+#include "air_mouse.h"
 #include "mouse_mode.h"
 #include "multitouch_poc.h"
 #include "sd_card.h"
@@ -105,6 +106,9 @@ static input_router_t s_input_router;
 static action_engine_context_t s_action_context;
 static const char *s_hint_text = "";
 static bool s_mic_gate_enabled = false;
+static bool s_mouse_overlay_active = false;
+
+static void app_deactivate_mouse_overlay(void);
 static const char *s_touch_debug_text = NULL;
 EXT_RAM_BSS_ATTR static char s_top_status_text[128] = {0};
 EXT_RAM_BSS_ATTR static char s_sr_debug_text[32] = {0};
@@ -1012,6 +1016,8 @@ static esp_err_t app_apply_mode_config(const mode_config_t *config)
     ui_status_init(touch_event_cb, NULL, s_mode_config->defaults.touch.hold_ms);
     ui_status_set_swipe_min_distance(s_mode_config->defaults.touch.swipe_min_distance);
     app_refresh_ui(NULL);
+    mouse_mode_set_touch_config(&s_mode_config->defaults.touch_mouse);
+    mouse_mode_set_type(s_mode_config->defaults.default_mouse);
     app_sync_mouse_mode();
     return ESP_OK;
 }
@@ -1151,7 +1157,9 @@ static void app_reset_active_outputs(void *user_data)
     usb_composite_set_ptt_audio_active(false);
     input_router_cancel_touch(&s_input_router);
     (void)usb_composite_release_all_keys();
-    if (mouse_mode_is_active()) {
+    if (s_mouse_overlay_active) {
+        app_deactivate_mouse_overlay();
+    } else if (mouse_mode_is_active()) {
         mouse_mode_set_active(false);
         ui_status_set_mouse_mode(false);
     }
@@ -1164,6 +1172,51 @@ static void app_sync_mouse_mode(void)
         mouse_mode_set_active(should_be_active);
         ui_status_set_mouse_mode(should_be_active);
     }
+}
+
+static void app_deactivate_mouse_overlay(void)
+{
+    if (!s_mouse_overlay_active) {
+        return;
+    }
+    mouse_mode_force_release();
+    mouse_mode_set_active(false);
+    ui_status_set_mouse_mode(false);
+    s_mouse_overlay_active = false;
+    ESP_LOGI(TAG, "mouse overlay deactivated");
+}
+
+static bool app_get_mouse_overlay(void *user_data)
+{
+    (void)user_data;
+    return s_mouse_overlay_active;
+}
+
+static void app_set_mouse_overlay(bool enabled, mouse_mode_type_t type,
+                                  bool immediate_tracking, void *user_data)
+{
+    (void)user_data;
+
+    if (!enabled) {
+        app_deactivate_mouse_overlay();
+        return;
+    }
+
+    if (s_mouse_overlay_active) {
+        return;
+    }
+
+    if (type != MOUSE_MODE_TYPE_DEFAULT) {
+        mouse_mode_set_type(type);
+    }
+    mouse_mode_set_active(true);
+    ui_status_set_mouse_mode(true);
+    s_mouse_overlay_active = true;
+
+    if (immediate_tracking) {
+        mouse_mode_start_tracking();
+    }
+    ESP_LOGI(TAG, "mouse overlay activated (tracking=%d)", immediate_tracking);
 }
 
 static void app_dispatch_binding_event(const mode_binding_event_t *event)
@@ -1238,6 +1291,9 @@ static void app_dispatch_binding_event(const mode_binding_event_t *event)
     /* Detect mode transitions to/from mouse mode and update trackpad state. */
     mode_id_t mode_after = mode_controller_get_active_mode(&s_mode_controller);
     if (mode_before != mode_after) {
+        if (s_mouse_overlay_active) {
+            app_deactivate_mouse_overlay();
+        }
         bool was_mouse = (mode_before == MODE_ID_MOUSE);
         bool is_mouse = (mode_after == MODE_ID_MOUSE);
         if (is_mouse && !was_mouse) {
@@ -1323,7 +1379,15 @@ static void app_task(void *arg)
                 app_refresh_ui(NULL);
             }
             if (mouse_mode_is_active()) {
-                /* Touch is handled entirely by the mouse_mode LVGL timer. */
+                if (s_mouse_overlay_active &&
+                    (event.touch_event == UI_STATUS_TOUCH_RAW_RELEASED)) {
+                    event_count = input_router_handle_touch(&s_input_router,
+                                                            app_map_touch_event(event.touch_event),
+                                                            event.tick_ms,
+                                                            normalized_events,
+                                                            APP_MAX_NORMALIZED_EVENTS);
+                    break;
+                }
                 break;
             }
             if (!mode_controller_is_boot_mode_active(&s_mode_controller)) {
@@ -1522,6 +1586,8 @@ void app_main(void)
         .set_hint_text = app_set_hint_text,
         .reset_active_outputs = app_reset_active_outputs,
         .refresh_ui = app_refresh_ui,
+        .get_mouse_overlay = app_get_mouse_overlay,
+        .set_mouse_overlay = app_set_mouse_overlay,
         .user_data = NULL,
     };
 
@@ -1529,6 +1595,9 @@ void app_main(void)
     ui_status_init(touch_event_cb, NULL, s_mode_config->defaults.touch.hold_ms);
     ui_status_set_swipe_min_distance(s_mode_config->defaults.touch.swipe_min_distance);
     mouse_mode_init();
+    air_mouse_init(&s_mode_config->defaults.air_mouse);
+    mouse_mode_set_touch_config(&s_mode_config->defaults.touch_mouse);
+    mouse_mode_set_type(s_mode_config->defaults.default_mouse);
     multitouch_poc_init();
     app_refresh_ui(NULL);
     app_sync_mouse_mode();

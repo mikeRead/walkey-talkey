@@ -30,6 +30,41 @@
             "doubleTapMs": { "type": "integer", "minimum": 0, "description": "Maximum gap between taps before a pending tap is emitted instead of double_tap." },
             "swipeMinDistance": { "type": "integer", "minimum": 0, "description": "Minimum travel distance before a touch is classified as a swipe." }
           }
+        },
+        "mouseMode": {
+          "type": "string",
+          "enum": ["touch", "air"],
+          "description": "Backward-compatible mouse mode selector. Prefer defaultMouse instead."
+        },
+        "defaultMouse": {
+          "type": "string",
+          "enum": ["airMouse", "touchMouse"],
+          "description": "Active mouse backend: \"airMouse\" uses the QMI8658 gyroscope (touch-gated); \"touchMouse\" uses the touchscreen as a trackpad."
+        },
+        "airMouse": {
+          "type": "object",
+          "description": "Tuning parameters for the gyroscope-based air mouse backend.",
+          "additionalProperties": false,
+          "properties": {
+            "sensitivity": { "type": "number", "description": "Overall gain multiplier for cursor speed. Default 0.15." },
+            "deadZoneDps": { "type": "number", "minimum": 0, "description": "Gyro readings below this threshold (degrees/sec) are ignored. Default 6.0." },
+            "easingExponent": { "type": "number", "minimum": 0, "description": "Power curve exponent. 1.0 = linear, higher = more precision at slow speeds. Default 1.25." },
+            "maxDps": { "type": "number", "minimum": 1, "description": "Maximum gyro range for easing normalization (matches QMI8658 config). Default 512." },
+            "emaAlpha": { "type": "number", "minimum": 0, "maximum": 1, "description": "EMA low-pass filter coefficient. 0 = frozen, 1 = no smoothing. Default 0.35." },
+            "rewindDepth": { "type": "integer", "minimum": 0, "maximum": 16, "description": "Ring buffer size for release-rewind in samples (10ms each). Default 12." },
+            "rewindDecay": { "type": "number", "minimum": 0, "maximum": 1, "description": "Exponential weight decay for rewind. Default 0.7." },
+            "calibrationSamples": { "type": "integer", "minimum": 1, "description": "Number of gyro samples averaged during startup calibration. Default 50." }
+          }
+        },
+        "touchMouse": {
+          "type": "object",
+          "description": "Tuning parameters for the touchscreen trackpad mouse backend.",
+          "additionalProperties": false,
+          "properties": {
+            "sensitivity": { "type": "number", "minimum": 0, "description": "Multiplier for touch-to-cursor pixel mapping. >1 = faster, <1 = more precise. Default 1.0." },
+            "moveThresholdPx": { "type": "integer", "minimum": 0, "description": "Minimum cumulative pixel movement before a touch counts as a drag. Default 10." },
+            "tapDragWindowMs": { "type": "integer", "minimum": 0, "description": "Time window after a tap release to detect tap-drag (second press). Default 200." }
+          }
         }
       }
     },
@@ -303,8 +338,27 @@
                 "exit_boot_mode",
                 "mic_gate_toggle",
                 "ui_show_mode",
-                "noop"
+                "noop",
+                "mouse_off"
               ]
+            }
+          }
+        },
+        {
+          "description": "Activate a mouse overlay on the current mode. Cursor tracking starts immediately by default.",
+          "additionalProperties": false,
+          "required": ["type"],
+          "properties": {
+            "type": { "enum": ["mouse_on", "mouse_toggle"] },
+            "mouseType": {
+              "type": "string",
+              "enum": ["airMouse", "touchMouse"],
+              "description": "Override the default mouse backend for this activation."
+            },
+            "tracking": {
+              "type": "boolean",
+              "default": true,
+              "description": "If true (default), cursor tracking starts immediately. If false, the full gesture handler is used."
             }
           }
         }

@@ -50,6 +50,22 @@ A valid config uses this overall shape:
       "holdMs": 400,
       "doubleTapMs": 350,
       "swipeMinDistance": 40
+    },
+    "defaultMouse": "airMouse",
+    "airMouse": {
+      "sensitivity": 1.0,
+      "deadZoneDps": 6.0,
+      "easingExponent": 1.25,
+      "maxDps": 300.0,
+      "emaAlpha": 0.35,
+      "rewindDepth": 12,
+      "rewindDecay": 0.7,
+      "calibrationSamples": 128
+    },
+    "touchMouse": {
+      "sensitivity": 1.0,
+      "moveThresholdPx": 5,
+      "tapDragWindowMs": 180
     }
   },
   "wifi": {
@@ -130,7 +146,7 @@ Avoid:
 
 ## Defaults Block
 
-The `defaults` block currently matters for touch timing:
+The `defaults` block controls touch timing and mouse backend configuration:
 
 ```json
 "defaults": {
@@ -138,15 +154,56 @@ The `defaults` block currently matters for touch timing:
     "holdMs": 400,
     "doubleTapMs": 350,
     "swipeMinDistance": 40
+  },
+  "defaultMouse": "airMouse",
+  "airMouse": {
+    "sensitivity": 1.0,
+    "deadZoneDps": 6.0,
+    "easingExponent": 1.25,
+    "maxDps": 300.0,
+    "emaAlpha": 0.35,
+    "rewindDepth": 12,
+    "rewindDecay": 0.7,
+    "calibrationSamples": 128
+  },
+  "touchMouse": {
+    "sensitivity": 1.0,
+    "moveThresholdPx": 5,
+    "tapDragWindowMs": 180
   }
 }
 ```
 
-Guidance:
+### Touch Timing
 
-- keep defaults conservative unless the prompt specifically wants different gesture timing
+- `holdMs` -- milliseconds before a press becomes a long-press
+- `doubleTapMs` -- window for a second tap to count as double-tap
+- `swipeMinDistance` -- minimum pixel distance for a swipe gesture
+
+### Mouse Configuration
+
+- `defaultMouse` -- which mouse backend is active: `"airMouse"` (gyro/IMU) or `"touchMouse"` (trackpad-style)
+- `airMouse` -- tuning for the gyroscope-based air mouse:
+  - `sensitivity` -- overall cursor speed multiplier (default 1.0)
+  - `deadZoneDps` -- degrees/second below which gyro input is ignored (default 6.0)
+  - `easingExponent` -- power curve exponent; lower = more linear, higher = more acceleration (default 1.25)
+  - `maxDps` -- gyro saturation point in degrees/second (default 300.0)
+  - `emaAlpha` -- EMA smoothing factor 0..1; lower = smoother but laggier (default 0.35)
+  - `rewindDepth` -- number of recent samples rewound on release to cancel jitter (max 16, default 12)
+  - `rewindDecay` -- exponential decay weight for rewind; lower = more aggressive compensation (default 0.7)
+  - `calibrationSamples` -- IMU samples taken at startup for drift calibration (default 128)
+- `touchMouse` -- tuning for the touch-based mouse:
+  - `sensitivity` -- cursor speed multiplier (default 1.0)
+  - `moveThresholdPx` -- minimum pixels of movement before cursor starts tracking (default 5)
+  - `tapDragWindowMs` -- window after a tap to detect tap-and-drag (default 180)
+
+### Defaults Guidance
+
+- keep defaults conservative unless the prompt specifically wants different gesture timing or mouse tuning
 - do not set absurdly low hold or double-tap thresholds
-- if the prompt is only about macros, leave touch defaults near the existing values
+- if the prompt is only about macros, leave defaults near the existing values
+- all `airMouse` and `touchMouse` fields are optional; omitted fields use firmware defaults
+- the old `"mouseMode": "air"` / `"touch"` string is still accepted for backward compatibility but `defaultMouse` is preferred
 
 ## Wi-Fi Block
 
@@ -277,6 +334,9 @@ Supported action types:
 - `ui_show_mode`
 - `set_mode`
 - `cycle_mode`
+- `mouse_on`
+- `mouse_off`
+- `mouse_toggle`
 - `noop`
 
 ## Action Reference
@@ -424,6 +484,33 @@ Examples:
 { "type": "mic_gate", "enabled": true }
 { "type": "mic_gate", "enabled": false }
 { "type": "mic_gate_toggle" }
+```
+
+### Mouse Overlay Actions
+
+Activate or deactivate mouse functionality as an overlay on the current mode without switching to the dedicated Mouse mode.
+
+- `mouse_on` -- activates mouse overlay. Cursor tracking starts immediately by default (no click on release).
+  - `mouseType` (optional): `"airMouse"` or `"touchMouse"`. Overrides `defaultMouse` for this activation.
+  - `tracking` (optional, default `true`): if `true`, cursor moves immediately; if `false`, the full gesture handler is used (long-press = cursor, tap = click, etc.).
+- `mouse_off` -- deactivates mouse overlay. Stops tracking, releases buttons, no click produced.
+- `mouse_toggle` -- toggles overlay on/off. Same optional fields as `mouse_on` (used only when toggling ON).
+
+When the overlay is active, touch events go to the mouse gesture handler. Release events are also forwarded to the input router so `hold_end` bindings can fire (enabling hold-to-mouse patterns). The overlay auto-deactivates on mode change.
+
+```jsonc
+// Hold-to-mouse: long press activates air mouse, release deactivates
+{ "input": "touch", "trigger": "hold_start", "actions": [{ "type": "mouse_on" }] }
+{ "input": "touch", "trigger": "hold_end", "actions": [{ "type": "mouse_off" }] }
+
+// Toggle mouse on/off with double-tap
+{ "input": "touch", "trigger": "double_tap", "actions": [{ "type": "mouse_toggle" }] }
+
+// Explicit touch backend override
+{ "type": "mouse_on", "mouseType": "touchMouse" }
+
+// Full gesture mode (not tracking-only)
+{ "type": "mouse_on", "tracking": false }
 ```
 
 ### No-Op
@@ -682,6 +769,22 @@ This is a valid end-to-end example:
       "holdMs": 400,
       "doubleTapMs": 350,
       "swipeMinDistance": 40
+    },
+    "defaultMouse": "airMouse",
+    "airMouse": {
+      "sensitivity": 1.0,
+      "deadZoneDps": 6.0,
+      "easingExponent": 1.25,
+      "maxDps": 300.0,
+      "emaAlpha": 0.35,
+      "rewindDepth": 12,
+      "rewindDecay": 0.7,
+      "calibrationSamples": 128
+    },
+    "touchMouse": {
+      "sensitivity": 1.0,
+      "moveThresholdPx": 5,
+      "tapDragWindowMs": 180
     }
   },
   "wifi": {
@@ -791,6 +894,37 @@ This is a valid end-to-end example:
           "trigger": "tap",
           "actions": [
             { "type": "hid_usage_tap", "usage": "PLAY_PAUSE" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "presentation",
+      "label": "Presentation",
+      "cycleOrder": 2,
+      "bindings": [
+        {
+          "input": "touch",
+          "trigger": "tap",
+          "actions": [
+            { "type": "hid_key_tap", "key": "RIGHT_ARROW" },
+            { "type": "ui_hint", "text": "Next slide" }
+          ]
+        },
+        {
+          "input": "touch",
+          "trigger": "hold_start",
+          "actions": [
+            { "type": "mouse_on" },
+            { "type": "ui_hint", "text": "Air mouse" }
+          ]
+        },
+        {
+          "input": "touch",
+          "trigger": "hold_end",
+          "actions": [
+            { "type": "mouse_off" },
+            { "type": "ui_hint", "text": "Presentation" }
           ]
         }
       ]
@@ -945,8 +1079,8 @@ The MCP server calls these firmware HTTP endpoints:
 | DELETE | `/api/mode?id=X` | Delete mode |
 | GET | `/api/wifi` | Get Wi-Fi config |
 | PUT | `/api/wifi` | Update Wi-Fi (merge) |
-| GET | `/api/defaults` | Get touch defaults |
-| PUT | `/api/defaults` | Update defaults (merge) |
+| GET | `/api/defaults` | Get defaults (touch, mouse) |
+| PUT | `/api/defaults` | Update defaults (touch, mouse; merge) |
 | PUT | `/api/active-mode` | Set active mode |
 | GET | `/api/boot-mode` | Get boot mode |
 | GET | `/api/global-bindings` | Get global bindings |
