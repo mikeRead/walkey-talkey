@@ -1400,7 +1400,12 @@ static bool mode_json_parse_actions(const mode_json_value_t *actions_value,
                 return mode_json_fail_compile_at(error, action_path, "mic_gate requires a boolean enabled field");
             }
             action->type = MODE_ACTION_MIC_GATE;
-            action->data.enabled = enabled_value->data.boolean;
+            action->data.mic_gate.enabled = enabled_value->data.boolean;
+            action->data.mic_gate.recording_override = -1;
+            const mode_json_value_t *rec_value = mode_json_object_get(action_value, "recording");
+            if ((rec_value != NULL) && (rec_value->type == MODE_JSON_VALUE_BOOL)) {
+                action->data.mic_gate.recording_override = rec_value->data.boolean ? 1 : 0;
+            }
         } else if (mode_json_equals_ignore_case(action_type, "mic_gate_toggle")) {
             action->type = MODE_ACTION_MIC_GATE_TOGGLE;
         } else if (mode_json_equals_ignore_case(action_type, "ui_hint")) {
@@ -1934,6 +1939,46 @@ static bool mode_json_validate_runtime_limits(const mode_config_t *config, mode_
     return true;
 }
 
+static bool mode_json_parse_recording_config(const mode_json_value_t *root_value,
+                                             mode_recording_config_t *recording,
+                                             mode_json_error_t *error)
+{
+    const mode_json_value_t *rec_value = mode_json_object_get(root_value, "recording");
+    if (rec_value == NULL) {
+        return true;
+    }
+
+    if (rec_value->type != MODE_JSON_VALUE_OBJECT) {
+        return mode_json_fail_compile(error, "recording must be an object");
+    }
+
+    static const char *const allowed_recording_keys[] = {"enabled", "format"};
+    if (!mode_json_validate_object_keys(rec_value,
+                                        allowed_recording_keys,
+                                        sizeof(allowed_recording_keys) / sizeof(allowed_recording_keys[0]),
+                                        error,
+                                        "recording")) {
+        return false;
+    }
+
+    const mode_json_value_t *enabled_value = mode_json_object_get(rec_value, "enabled");
+    if ((enabled_value != NULL) && (enabled_value->type == MODE_JSON_VALUE_BOOL)) {
+        recording->enabled = enabled_value->data.boolean;
+    }
+
+    const mode_json_value_t *format_value = mode_json_object_get(rec_value, "format");
+    if (format_value != NULL) {
+        if ((format_value->type != MODE_JSON_VALUE_STRING) ||
+            !mode_json_equals_ignore_case(format_value->data.string, "wav")) {
+            return mode_json_fail_compile(error, "recording.format must be \"wav\"");
+        }
+        free((void *)recording->format);
+        recording->format = mode_json_strdup(format_value->data.string);
+    }
+
+    return true;
+}
+
 static bool mode_json_compile_config(const mode_json_value_t *root_value,
                                      mode_config_t **out_config,
                                      mode_json_error_t *error)
@@ -1943,7 +1988,7 @@ static bool mode_json_compile_config(const mode_json_value_t *root_value,
     }
 
     static const char *const allowed_top_level_keys[] = {
-        "version", "activeMode", "defaults", "wifi", "globalBindings", "bootMode", "modes"
+        "version", "activeMode", "defaults", "wifi", "recording", "globalBindings", "bootMode", "modes"
     };
     if (!mode_json_validate_object_keys(root_value,
                                         allowed_top_level_keys,
@@ -1993,6 +2038,9 @@ static bool mode_json_compile_config(const mode_json_value_t *root_value,
         free(config);
         return mode_json_fail_compile(error, "Out of memory while allocating wifi defaults");
     }
+
+    config->recording.enabled = false;
+    config->recording.format = mode_json_strdup("wav");
 
     mode_json_pending_mode_refs_t pending_refs = {0};
     const mode_json_value_t *version_value = mode_json_object_get(root_value, "version");
@@ -2146,6 +2194,13 @@ static bool mode_json_compile_config(const mode_json_value_t *root_value,
 
     if (!mode_json_parse_wifi_config(root_value, &config->wifi, error)) {
         mode_json_free_wifi_config(&config->wifi);
+        free(config);
+        return false;
+    }
+
+    if (!mode_json_parse_recording_config(root_value, &config->recording, error)) {
+        mode_json_free_wifi_config(&config->wifi);
+        free((void *)config->recording.format);
         free(config);
         return false;
     }
@@ -2467,10 +2522,15 @@ static bool mode_json_export_action(mode_json_string_builder_t *builder,
         return mode_json_builder_append_text(builder, "{\"type\":\"enter_boot_mode\"}");
     case MODE_ACTION_EXIT_BOOT_MODE:
         return mode_json_builder_append_text(builder, "{\"type\":\"exit_boot_mode\"}");
-    case MODE_ACTION_MIC_GATE:
-        return mode_json_builder_append_text(builder, "{\"type\":\"mic_gate\",\"enabled\":") &&
-               mode_json_builder_append_bool(builder, action->data.enabled) &&
-               mode_json_builder_append_char(builder, '}');
+    case MODE_ACTION_MIC_GATE: {
+        bool mic_ok = mode_json_builder_append_text(builder, "{\"type\":\"mic_gate\",\"enabled\":") &&
+                      mode_json_builder_append_bool(builder, action->data.mic_gate.enabled);
+        if (mic_ok && (action->data.mic_gate.recording_override >= 0)) {
+            mic_ok = mode_json_builder_append_text(builder, ",\"recording\":") &&
+                     mode_json_builder_append_bool(builder, action->data.mic_gate.recording_override == 1);
+        }
+        return mic_ok && mode_json_builder_append_char(builder, '}');
+    }
     case MODE_ACTION_MIC_GATE_TOGGLE:
         return mode_json_builder_append_text(builder, "{\"type\":\"mic_gate_toggle\"}");
     case MODE_ACTION_UI_HINT:
@@ -2634,6 +2694,17 @@ static bool mode_json_export_wifi(mode_json_string_builder_t *builder, const mod
            mode_json_builder_append_char(builder, '}');
 }
 
+static bool mode_json_export_recording(mode_json_string_builder_t *builder, const mode_recording_config_t *recording)
+{
+    if ((builder == NULL) || (recording == NULL) || !recording->enabled) {
+        return true;
+    }
+
+    return mode_json_builder_append_text(builder, ",\"recording\":{\"enabled\":true,\"format\":") &&
+           mode_json_builder_append_json_string(builder, (recording->format != NULL) ? recording->format : "wav") &&
+           mode_json_builder_append_char(builder, '}');
+}
+
 char *mode_json_export_canonical_string(const mode_config_t *config)
 {
     if (config == NULL) {
@@ -2685,6 +2756,7 @@ char *mode_json_export_canonical_string(const mode_config_t *config)
               mode_json_builder_append_u32(&builder, config->defaults.touch_mouse.tap_drag_window_ms) &&
               mode_json_builder_append_text(&builder, "}}") &&
               mode_json_export_wifi(&builder, &config->wifi) &&
+              mode_json_export_recording(&builder, &config->recording) &&
               mode_json_builder_append_text(&builder, ",\"globalBindings\":") &&
               mode_json_export_bindings(&builder,
                                         config->global_bindings,
@@ -2840,5 +2912,6 @@ void mode_json_free_config(mode_config_t *config)
     mode_json_free_boot_mode(&config->boot_mode);
     mode_json_free_bindings((mode_binding_t *)config->global_bindings, config->global_binding_count);
     mode_json_free_wifi_config(&config->wifi);
+    free((void *)config->recording.format);
     free(config);
 }

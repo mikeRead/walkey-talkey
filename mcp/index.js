@@ -56,7 +56,7 @@ function err(msg) {
 
 const server = new McpServer({
   name: "walkey-talkey",
-  version: "1.0.2",
+  version: "1.1.0",
 });
 
 // --- Discovery tools ---
@@ -395,6 +395,47 @@ All airMouse/touchMouse fields are optional; omitted fields keep current values.
   }
 );
 
+// --- Recording ---
+
+server.registerTool(
+  "walkey_get_recording",
+  {
+    description:
+      "Retrieve current SD card recording settings. Returns {enabled, format}. When enabled, mic_gate activations also write WAV files to the SD card at /sdcard/recordings/<modeId>/<sessionId>_<uptimeSec>.wav.",
+  },
+  async () => {
+    try {
+      const data = await apiGet("/api/recording");
+      return ok(data);
+    } catch (e) {
+      return err(e.message);
+    }
+  }
+);
+
+server.registerTool(
+  "walkey_set_recording",
+  {
+    description:
+      "Enable or disable SD card recording. When enabled, every mic_gate activation writes a WAV file (48kHz/16-bit/mono) to the SD card. Files are saved at /sdcard/recordings/<modeId>/<sessionId>_<uptimeSec>.wav. Merge semantics: only provided fields change.",
+    inputSchema: {
+      recording: z
+        .record(z.any())
+        .describe(
+          'Recording settings, e.g. {enabled: true} or {enabled: false}'
+        ),
+    },
+  },
+  async ({ recording }) => {
+    try {
+      const data = await apiPut("/api/recording", recording);
+      return ok(data);
+    } catch (e) {
+      return err(e.message);
+    }
+  }
+);
+
 // --- Active mode ---
 
 server.registerTool(
@@ -500,6 +541,53 @@ server.registerTool(
   async () => {
     try {
       const data = await apiPost("/config/reset", {});
+      return ok(data);
+    } catch (e) {
+      return err(e.message);
+    }
+  }
+);
+
+// --- Recording file tools ---
+
+server.registerTool(
+  "walkey_list_recordings",
+  { description: "List all audio recordings on the SD card. Returns path and size for each WAV file under /sdcard/recordings/." },
+  async () => {
+    try {
+      const data = await apiGet("/api/recordings");
+      return ok(data);
+    } catch (e) {
+      return err(e.message);
+    }
+  }
+);
+
+server.registerTool(
+  "walkey_download_recording",
+  {
+    description: "Download a recording WAV file from the device. Returns the download URL. Use walkey_list_recordings first to get available file paths.",
+    inputSchema: {
+      file: z.string().describe("Relative path of the recording, e.g. 'whisper/ABC123_00042.wav'"),
+    },
+  },
+  async ({ file }) => {
+    const url = `${DEVICE_URL}/api/recordings/download?file=${file}`;
+    return { content: [{ type: "text", text: `Download URL: ${url}\n\nUse this URL to download the WAV file directly.` }] };
+  }
+);
+
+server.registerTool(
+  "walkey_delete_recording",
+  {
+    description: "Delete a recording WAV file from the SD card. Use walkey_list_recordings first to get available file paths.",
+    inputSchema: {
+      file: z.string().describe("Relative path of the recording to delete, e.g. 'whisper/ABC123_00042.wav'"),
+    },
+  },
+  async ({ file }) => {
+    try {
+      const data = await apiGet(`/api/recordings/delete?file=${file}`);
       return ok(data);
     } catch (e) {
       return err(e.message);

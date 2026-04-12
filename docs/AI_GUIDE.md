@@ -80,6 +80,9 @@ A valid config uses this overall shape:
     "hostname": "walkey-talkey",
     "localUrl": "walkey-talkey.local"
   },
+  "recording": {
+    "enabled": false
+  },
   "globalBindings": [],
   "bootMode": {
     "label": "Mode Control",
@@ -108,6 +111,7 @@ These root keys are optional but commonly used:
 - `activeMode`
 - `defaults`
 - `wifi`
+- `recording`
 
 ### Root Field Rules
 
@@ -122,9 +126,10 @@ Recommended key order:
 2. `activeMode`
 3. `defaults`
 4. `wifi`
-5. `globalBindings`
-6. `bootMode`
-7. `modes`
+5. `recording`
+6. `globalBindings`
+7. `bootMode`
+8. `modes`
 
 ## Canonical Modeling Style
 
@@ -234,6 +239,38 @@ Meaning:
 Do not swap the STA and AP roles.
 
 If the user's prompt is unrelated to networking, preserve this block as-is.
+
+## Recording Block
+
+The optional `recording` block controls SD card audio recording during mic gate activations:
+
+```json
+"recording": {
+  "enabled": true,
+  "format": "wav"
+}
+```
+
+- `enabled` (boolean, default `false`) -- master toggle for recording
+- `format` (string, default `"wav"`) -- audio format; only `"wav"` is supported
+
+When enabled, every `mic_gate` activation writes a WAV file (48kHz, 16-bit, mono) to `/sdcard/recordings/<modeId>/<sessionId>_<uptimeSec>.wav`. The `sessionId` is a random 32-bit hex generated once per boot; `uptimeSec` is seconds since boot.
+
+Omitting `"recording"` entirely is equivalent to `{"enabled": false}`.
+
+Individual `mic_gate` actions can override the global setting with an optional `"recording"` boolean field:
+
+```json
+{ "type": "mic_gate", "enabled": true, "recording": true }
+```
+
+The override is only meaningful when `enabled` is `true`. When `mic_gate` is `enabled: false`, recording always stops regardless.
+
+Recordings are accessed over HTTP (Wi-Fi), **not** via USB drive browsing:
+
+- `GET /api/recordings` -- list all recordings with sizes
+- `GET /api/recordings/download?file=<path>` -- download a WAV file
+- `GET /api/recordings/delete?file=<path>` -- delete a recording
 
 ## Binding Model
 
@@ -485,6 +522,15 @@ Examples:
 { "type": "mic_gate", "enabled": false }
 { "type": "mic_gate_toggle" }
 ```
+
+An optional `"recording"` boolean on `mic_gate` overrides the global `recording.enabled` setting for that activation:
+
+```json
+{ "type": "mic_gate", "enabled": true, "recording": true }
+{ "type": "mic_gate", "enabled": true, "recording": false }
+```
+
+When `mic_gate` is `enabled: false`, recording always stops regardless of any override.
 
 ### Mouse Overlay Actions
 
@@ -1037,33 +1083,37 @@ Or add to `claude_desktop_config.json`:
 
 ### Available MCP Tools
 
-The MCP server exposes 23 tools under the `walkey.*` namespace:
+The MCP server exposes 27 tools under the `walkey_*` namespace:
 
-**Discovery**: `walkey.ping`, `walkey.get_config`, `walkey.get_config_canonical`, `walkey.get_schema`
+**Discovery**: `walkey_ping`, `walkey_get_config`, `walkey_get_config_canonical`, `walkey_get_schema`
 
-**Mode CRUD**: `walkey.list_modes`, `walkey.get_mode`, `walkey.set_mode`, `walkey.create_mode`, `walkey.delete_mode`
+**Mode CRUD**: `walkey_list_modes`, `walkey_get_mode`, `walkey_set_mode`, `walkey_create_mode`, `walkey_delete_mode`
 
-**Binding-level**: `walkey.get_bindings`, `walkey.set_binding`, `walkey.remove_binding`
+**Binding-level**: `walkey_get_bindings`, `walkey_set_binding`, `walkey_remove_binding`
 
-**Wi-Fi**: `walkey.get_wifi`, `walkey.set_wifi`
+**Wi-Fi**: `walkey_get_wifi`, `walkey_set_wifi`
 
-**Defaults**: `walkey.get_defaults`, `walkey.set_defaults`
+**Defaults**: `walkey_get_defaults`, `walkey_set_defaults`
 
-**Active mode**: `walkey.get_active_mode`, `walkey.set_active_mode`
+**Recording config**: `walkey_get_recording`, `walkey_set_recording`
 
-**Boot mode**: `walkey.get_boot_mode`
+**Recording files**: `walkey_list_recordings`, `walkey_download_recording`, `walkey_delete_recording`
 
-**Global**: `walkey.get_global_bindings`
+**Active mode**: `walkey_get_active_mode`, `walkey_set_active_mode`
 
-**Escape hatch**: `walkey.set_config`, `walkey.validate_config`, `walkey.reset_config`
+**Boot mode**: `walkey_get_boot_mode`
+
+**Global**: `walkey_get_global_bindings`
+
+**Escape hatch**: `walkey_set_config`, `walkey_validate_config`, `walkey_reset_config`
 
 ### AI Best Practices for MCP
 
 When using MCP tools to update the device:
 
-1. **Prefer per-mode tools** (`walkey.set_mode`, `walkey.set_binding`) over the full-config escape hatch (`walkey.set_config`). Per-mode tools only touch the targeted mode -- they never accidentally overwrite Wi-Fi or other modes.
-2. **Read before write**: call `walkey.get_mode` to get the current state, then modify and pass to `walkey.set_mode`.
-3. **Validate first**: use `walkey.validate_config` before `walkey.set_config` if replacing the full config.
+1. **Prefer per-mode tools** (`walkey_set_mode`, `walkey_set_binding`) over the full-config escape hatch (`walkey_set_config`). Per-mode tools only touch the targeted mode -- they never accidentally overwrite Wi-Fi or other modes.
+2. **Read before write**: call `walkey_get_mode` to get the current state, then modify and pass to `walkey_set_mode`.
+3. **Validate first**: use `walkey_validate_config` before `walkey_set_config` if replacing the full config.
 4. **Never silently change Wi-Fi** unless the user explicitly requests it.
 
 ### Granular REST API Reference
@@ -1081,6 +1131,12 @@ The MCP server calls these firmware HTTP endpoints:
 | PUT | `/api/wifi` | Update Wi-Fi (merge) |
 | GET | `/api/defaults` | Get defaults (touch, mouse) |
 | PUT | `/api/defaults` | Update defaults (touch, mouse; merge) |
+| GET | `/api/recording` | Get recording config |
+| PUT | `/api/recording` | Update recording config (merge) |
+| GET | `/api/recordings` | List all recording WAV files |
+| GET | `/api/recordings/download?file=...` | Download a recording WAV file |
+| GET | `/api/recordings/delete?file=...` | Delete a recording WAV file |
+| GET | `/recordings` | Recordings management web UI (HTML) |
 | PUT | `/api/active-mode` | Set active mode |
 | GET | `/api/boot-mode` | Get boot mode |
 | GET | `/api/global-bindings` | Get global bindings |

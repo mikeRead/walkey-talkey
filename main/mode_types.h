@@ -159,12 +159,18 @@ typedef struct {
 } mode_hid_usage_t;
 
 typedef struct {
+    bool enabled;
+    int8_t recording_override; /* -1 = use global default, 0 = force off, 1 = force on */
+} mode_mic_gate_data_t;
+
+typedef struct {
     mode_action_type_t type;
     union {
         mode_hid_usage_t hid_usage;
         mode_hid_modifier_t modifier;
         uint32_t duration_ms;
         bool enabled;
+        mode_mic_gate_data_t mic_gate;
         const char *text;
         mode_id_t mode;
         mode_cycle_direction_t direction;
@@ -222,6 +228,11 @@ typedef struct {
 } mode_wifi_config_t;
 
 typedef struct {
+    bool enabled;
+    const char *format;
+} mode_recording_config_t;
+
+typedef struct {
     const char *title;
     const char *subtitle;
     bool show_mode_list;
@@ -250,6 +261,7 @@ typedef struct {
     mode_id_t active_mode;
     mode_defaults_t defaults;
     mode_wifi_config_t wifi;
+    mode_recording_config_t recording;
     const mode_binding_t *global_bindings;
     size_t global_binding_count;
     mode_boot_mode_t boot_mode;

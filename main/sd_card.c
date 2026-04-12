@@ -7,7 +7,6 @@
 static const char *TAG = "sd_card";
 
 static bool s_initialized = false;
-static bool s_mounted = false;
 
 esp_err_t sd_card_init(void)
 {
@@ -23,7 +22,6 @@ esp_err_t sd_card_init(void)
     }
 
     s_initialized = true;
-    s_mounted = true;
     ESP_LOGI(TAG, "SD card ready via BSP: %s %lluMB",
              bsp_sdcard->cid.name,
              ((uint64_t)bsp_sdcard->csd.capacity) * bsp_sdcard->csd.sector_size / (1024 * 1024));
@@ -38,28 +36,6 @@ bool sd_card_is_present(void)
 sdmmc_card_t *sd_card_get_card(void)
 {
     return bsp_sdcard;
-}
-
-esp_err_t sd_card_mount(void)
-{
-    if (!s_initialized || bsp_sdcard == NULL) {
-        return ESP_ERR_INVALID_STATE;
-    }
-    if (s_mounted) {
-        return ESP_OK;
-    }
-    return ESP_ERR_NOT_SUPPORTED;
-}
-
-esp_err_t sd_card_unmount(void)
-{
-    if (!s_mounted) {
-        return ESP_OK;
-    }
-
-    s_mounted = false;
-    ESP_LOGI(TAG, "FAT access disabled (SDMMC host + card kept alive for MSC)");
-    return ESP_OK;
 }
 
 uint32_t sd_card_block_count(void)

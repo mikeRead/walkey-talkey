@@ -27,10 +27,10 @@ static bool action_engine_get_mic_gate(action_engine_context_t *context)
     return context->get_mic_gate(context->user_data);
 }
 
-static void action_engine_set_mic_gate(action_engine_context_t *context, bool enabled)
+static void action_engine_set_mic_gate(action_engine_context_t *context, bool enabled, int8_t recording_override)
 {
     if ((context != NULL) && (context->set_mic_gate != NULL)) {
-        context->set_mic_gate(enabled, context->user_data);
+        context->set_mic_gate(enabled, recording_override, context->user_data);
     }
 }
 
@@ -167,13 +167,13 @@ bool action_engine_execute_actions(const mode_action_t *actions,
             break;
 
         case MODE_ACTION_MIC_GATE:
-            action_engine_set_mic_gate(context, action->data.enabled);
+            action_engine_set_mic_gate(context, action->data.mic_gate.enabled, action->data.mic_gate.recording_override);
             action_engine_refresh_ui(context);
             break;
 
         case MODE_ACTION_MIC_GATE_TOGGLE: {
             bool enabled = !action_engine_get_mic_gate(context);
-            action_engine_set_mic_gate(context, enabled);
+            action_engine_set_mic_gate(context, enabled, -1);
             action_engine_set_hint(context, enabled ? "Mic active" : "Mic off");
             action_engine_refresh_ui(context);
             break;

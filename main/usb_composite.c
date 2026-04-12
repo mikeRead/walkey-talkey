@@ -16,6 +16,7 @@
 #include "tusb.h"
 
 #include "audio_input.h"
+#include "audio_recorder.h"
 #include "sd_card.h"
 
 #define HID_REPORT_ID_KEYBOARD 1
@@ -167,7 +168,11 @@ static void usb_composite_audio_task(void *arg)
     uint8_t frame[AUDIO_INPUT_FRAME_BYTES] = {0};
 
     while (1) {
-        if (!s_initialized || !tud_mounted() || s_suspended || !s_audio_stream_open) {
+        bool usb_ready = s_initialized && tud_mounted() && !s_suspended;
+        bool stream_open = usb_ready && s_audio_stream_open;
+        bool need_mic = stream_open || s_ptt_audio_active;
+
+        if (!need_mic) {
             vTaskDelay(pdMS_TO_TICKS(5));
             continue;
         }
@@ -179,11 +184,16 @@ static void usb_composite_audio_task(void *arg)
             if ((err != ESP_OK) && s_ptt_audio_active) {
                 ESP_LOGW(TAG, "Mic frame read failed: %s", esp_err_to_name(err));
             }
+            if (s_ptt_audio_active) {
+                audio_recorder_feed(frame, sizeof(frame));
+            }
         }
 
-        uint16_t written = tud_audio_write(frame, sizeof(frame));
-        if (written != sizeof(frame)) {
-            vTaskDelay(pdMS_TO_TICKS(1));
+        if (stream_open) {
+            uint16_t written = tud_audio_write(frame, sizeof(frame));
+            if (written != sizeof(frame)) {
+                vTaskDelay(pdMS_TO_TICKS(1));
+            }
         }
     }
 }
@@ -811,6 +821,9 @@ int32_t tud_msc_read10_cb(uint8_t lun, uint32_t lba, uint32_t offset, void *buff
 {
     (void)lun;
     (void)offset;
+    if (!sd_card_is_present()) {
+        return -1;
+    }
     uint16_t bs = sd_card_block_size();
     if (bs == 0) {
         return -1;
@@ -823,6 +836,9 @@ int32_t tud_msc_write10_cb(uint8_t lun, uint32_t lba, uint32_t offset, uint8_t *
 {
     (void)lun;
     (void)offset;
+    if (!sd_card_is_present()) {
+        return -1;
+    }
     uint16_t bs = sd_card_block_size();
     if (bs == 0) {
         return -1;

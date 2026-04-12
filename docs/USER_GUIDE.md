@@ -129,6 +129,10 @@ A practical top-level config looks like this:
       "tapDragWindowMs": 180
     }
   },
+  "recording": {
+    "enabled": true,
+    "format": "wav"
+  },
   "globalBindings": [
     {
       "input": "boot_button",
@@ -528,6 +532,57 @@ Examples:
 { "type": "mic_gate_toggle" }
 ```
 
+An optional `"recording"` field on `mic_gate` overrides the global recording setting for that activation:
+
+```json
+{ "type": "mic_gate", "enabled": true, "recording": true }
+```
+
+See the **Recording** section below for details.
+
+### Recording
+
+When the `recording` block is enabled in your config, every `mic_gate` activation also writes a WAV file (48kHz, 16-bit, mono) to the SD card. Files are saved at `/sdcard/recordings/<modeId>/<sessionId>_<uptimeSec>.wav`.
+
+- `sessionId` is a random hex value generated once each time the device boots
+- `uptimeSec` is seconds since boot
+
+**Enable recording globally:**
+
+```json
+"recording": {
+  "enabled": true,
+  "format": "wav"
+}
+```
+
+**Disable recording (default):**
+
+Omit the `recording` block entirely, or set:
+
+```json
+"recording": {
+  "enabled": false
+}
+```
+
+**Per-action override:** Individual `mic_gate` actions can override the global setting:
+
+```json
+{ "type": "mic_gate", "enabled": true, "recording": true }
+```
+
+This records even when global recording is off. Conversely, `"recording": false` suppresses recording even when global recording is on. When `mic_gate` is `enabled: false`, recording always stops.
+
+**Accessing recordings:** Recordings are served over Wi-Fi, not via USB drive browsing. Browse to `http://walkey-talkey.local/recordings` for a web UI that lets you play, download, and delete recordings.
+
+- **Web UI:** `http://walkey-talkey.local/recordings`
+- **List recordings:** `GET http://walkey-talkey.local/api/recordings`
+- **Download a file:** `GET http://walkey-talkey.local/api/recordings/download?file=whisper/ABC123_00042.wav`
+- **Delete a file:** `GET http://walkey-talkey.local/api/recordings/delete?file=whisper/ABC123_00042.wav`
+
+You can also use the MCP tools (`walkey_list_recordings`, `walkey_download_recording`, `walkey_delete_recording`) for AI-assisted management.
+
 ### Per-Mode Mouse Actions
 
 You can activate mouse functionality (air mouse or touch trackpad) as an overlay on any mode without switching to the dedicated Mouse mode. This is useful for things like presentation mode where you want cursor control on demand.
@@ -863,7 +918,7 @@ Once configured, you can ask your AI assistant things like:
 - "What are my current touch defaults?"
 - "Switch the active mode to media"
 
-The AI uses 23 specialized tools to make precise, targeted changes without accidentally overwriting unrelated settings.
+The AI uses 27 specialized tools to make precise, targeted changes without accidentally overwriting unrelated settings.
 
 ### Environment Variables
 

@@ -534,7 +534,129 @@ Result:
 - Result:
 - Notes:
 
-## Section 8: Overall Summary
+## Section 8: Recording Endpoints And Web UI
+
+Precondition:
+
+- recording is enabled in config (`"recording": { "enabled": true }`)
+- at least one recording exists (trigger a mic gate hold to create one)
+- device is reachable at `http://walkey-talkey.local`
+
+### 8.1 List recordings returns file entries
+
+Steps:
+
+1. `GET http://walkey-talkey.local/api/recordings`
+
+Expected:
+
+- response is `200 OK` with `Content-Type: application/json`
+- JSON contains `"recordings"` array
+- each entry has `"path"` (string, e.g. `"whisper/ABC123_00042.wav"`) and `"size"` (number)
+- if no SD card is present, response includes `"error": "no_sd_card"`
+
+Result:
+
+- Result:
+- Notes:
+
+### 8.2 Download a recording streams WAV data
+
+Steps:
+
+1. Pick a `path` value from the list response
+2. `GET http://walkey-talkey.local/api/recordings/download?file=<path>`
+
+Expected:
+
+- response is `200 OK` with `Content-Type: audio/wav`
+- file downloads completely and is a valid WAV (playable in VLC or browser)
+- requesting a nonexistent path returns `404`
+
+Result:
+
+- Result:
+- Notes:
+
+### 8.3 Delete a recording removes it
+
+Steps:
+
+1. Pick a `path` value from the list response
+2. `GET http://walkey-talkey.local/api/recordings/delete?file=<path>`
+3. Re-list recordings
+
+Expected:
+
+- delete response is `200 OK` with `{"ok":true}`
+- the deleted file no longer appears in the list
+- deleting a nonexistent file returns `404`
+- path traversal (`../`) returns `400`
+
+Result:
+
+- Result:
+- Notes:
+
+### 8.4 Recordings web UI loads and is functional
+
+Steps:
+
+1. Browse to `http://walkey-talkey.local/recordings`
+
+Expected:
+
+- page loads with a list of recordings
+- each recording shows filename and size
+- Play button starts in-browser audio playback
+- Download button triggers file download
+- Delete button removes the file and refreshes the list
+- Delete All button removes all files after confirmation
+- if no recordings exist, page shows an appropriate message
+
+Result:
+
+- Result:
+- Notes:
+
+### 8.5 Recording created during mic gate activation
+
+Steps:
+
+1. Ensure recording is enabled in config
+2. In a mode with mic_gate binding (e.g. Cursor), trigger and release a hold
+3. List recordings via API or web UI
+
+Expected:
+
+- a new WAV file appears in the list under the active mode name
+- file size is proportional to hold duration (~96 KB/sec at 48kHz/16-bit/mono)
+- file is playable and contains captured audio
+
+Result:
+
+- Result:
+- Notes:
+
+### 8.6 Per-action recording override
+
+Steps:
+
+1. Set global `"recording": { "enabled": false }`
+2. Add a binding with `{ "type": "mic_gate", "enabled": true, "recording": true }`
+3. Trigger the binding
+
+Expected:
+
+- recording is created despite global recording being off
+- the override only applies to that specific mic_gate activation
+
+Result:
+
+- Result:
+- Notes:
+
+## Section 9: Overall Summary
 
 - Overall result:
 - Most important failures:

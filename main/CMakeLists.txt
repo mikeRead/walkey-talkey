@@ -2,11 +2,13 @@ idf_component_register(
     SRCS
         action_engine.c
         air_mouse.c
-        main.c
         audio_input.c
+        audio_recorder.c
+        main.c
         boot_button.c
         config_api_service.c
         config_http_server.c
+        device_log.c
         input_router.c
         mode_config.c
         mode_hid_tokens.c
@@ -30,4 +32,4 @@ idf_component_register(
         ../docs/autorun.inf
         ../docs/ico.ico
     INCLUDE_DIRS .
-    REQUIRES spiffs esp_http_server esp_wifi esp_event esp_netif nvs_flash mdns espressif__esp-sr)
+    REQUIRES spiffs esp_http_server esp_wifi esp_event esp_netif nvs_flash mdns espressif__esp-sr esp_timer fatfs)

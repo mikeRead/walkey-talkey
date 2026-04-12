@@ -1,0 +1,304 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #00BFFF;
+  --color-accent: #E91E8C;
+  --color-highlight: #FFD700;
+  --color-secondary: #7B2FBE;
+  --color-surface: #141414;
+  --color-surface-raised: #1e1e1e;
+  --color-bg: #0a0a0a;
+  --color-text: #f5f5f5;
+  --color-text-muted: #888888;
+  --color-border: #2a2a2a;
+  --color-success: #22c55e;
+  --color-danger: #ef4444;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background-image:
+    radial-gradient(circle, rgba(0, 191, 255, 0.02) 1px, transparent 1px),
+    radial-gradient(circle, rgba(233, 30, 140, 0.015) 1px, transparent 1px);
+  background-size: 48px 48px, 36px 36px;
+  background-position: 0 0, 18px 18px;
+}
+
+/* Memphis-style geometric background patterns */
+.memphis-bg {
+  background-image:
+    /* scattered dots – cyan */
+    radial-gradient(circle, rgba(0, 191, 255, 0.07) 1.5px, transparent 1.5px),
+    /* scattered dots – magenta, offset */
+    radial-gradient(circle, rgba(233, 30, 140, 0.06) 1px, transparent 1px),
+    /* diagonal lines – purple */
+    repeating-linear-gradient(
+      45deg,
+      transparent,
+      transparent 40px,
+      rgba(123, 47, 190, 0.04) 40px,
+      rgba(123, 47, 190, 0.04) 41px
+    ),
+    /* cross-hatch – gold */
+    repeating-linear-gradient(
+      -45deg,
+      transparent,
+      transparent 60px,
+      rgba(255, 215, 0, 0.025) 60px,
+      rgba(255, 215, 0, 0.025) 61px
+    );
+  background-size: 32px 32px, 20px 20px, auto, auto;
+  background-position: 0 0, 10px 10px, 0 0, 0 0;
+}
+
+.memphis-dots {
+  background-image:
+    radial-gradient(circle, rgba(233, 30, 140, 0.07) 1px, transparent 1px),
+    radial-gradient(circle, rgba(0, 191, 255, 0.05) 1px, transparent 1px);
+  background-size: 20px 20px, 28px 28px;
+  background-position: 0 0, 8px 14px;
+}
+
+/* Floating Memphis shapes – use on containers with position:relative + overflow:hidden */
+.memphis-shapes {
+  position: relative;
+  overflow: hidden;
+}
+.memphis-shapes::before,
+.memphis-shapes::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+}
+/* Triangle top-right */
+.memphis-shapes::before {
+  top: -8px;
+  right: 40px;
+  width: 0;
+  height: 0;
+  border-left: 14px solid transparent;
+  border-right: 14px solid transparent;
+  border-bottom: 24px solid rgba(0, 191, 255, 0.06);
+  transform: rotate(15deg);
+}
+/* Circle bottom-left */
+.memphis-shapes::after {
+  bottom: 12px;
+  left: 24px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 215, 0, 0.08);
+}
+
+/* Zigzag bottom border accent */
+.memphis-zigzag {
+  position: relative;
+}
+.memphis-zigzag::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent,
+    transparent 8px,
+    rgba(233, 30, 140, 0.1) 8px,
+    rgba(233, 30, 140, 0.1) 12px,
+    transparent 12px,
+    transparent 16px
+  );
+}
+
+/* Section headers – 90s toy box block lettering feel */
+.section-title {
+  @apply text-lg font-extrabold uppercase tracking-widest;
+}
+
+/* Card – chunky toy box panel */
+@layer components {
+  .card {
+    border-radius: var(--radius-xl);
+    border-width: 2px;
+    border-style: solid;
+    border-color: var(--color-border);
+    background-color: color-mix(in srgb, var(--color-surface) 80%, transparent);
+    backdrop-filter: blur(12px);
+    padding: 1rem;
+    transition: all 0.2s;
+  }
+}
+
+/* Buttons – toy remote style */
+.btn {
+  @apply inline-flex items-center justify-center rounded-lg px-4 py-2 font-bold text-sm uppercase tracking-wider transition-all duration-150 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed;
+  min-height: 44px;
+}
+.btn-primary {
+  @apply bg-primary text-black;
+}
+.btn-primary:hover:not(:disabled) {
+  box-shadow: 0 0 20px rgba(0, 191, 255, 0.4);
+}
+.btn-accent {
+  @apply bg-accent text-white;
+}
+.btn-accent:hover:not(:disabled) {
+  box-shadow: 0 0 20px rgba(233, 30, 140, 0.4);
+}
+.btn-highlight {
+  @apply bg-highlight text-black;
+}
+.btn-highlight:hover:not(:disabled) {
+  box-shadow: 0 0 20px rgba(255, 215, 0, 0.4);
+}
+.btn-ghost {
+  @apply bg-transparent border-2 border-border text-text;
+}
+.btn-ghost:hover:not(:disabled) {
+  @apply border-primary text-primary;
+}
+.btn-danger {
+  @apply bg-danger text-white;
+}
+.btn-danger:hover:not(:disabled) {
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.4);
+}
+.btn-sm {
+  @apply text-xs px-3 py-1.5;
+  min-height: 36px;
+}
+
+/* Form inputs */
+.input {
+  @apply w-full rounded-lg border-2 border-border bg-surface-raised px-3 py-2 text-text outline-none transition-colors;
+  min-height: 44px;
+}
+.input:focus {
+  @apply border-primary;
+}
+.input::placeholder {
+  @apply text-text-muted;
+}
+
+/* Select */
+.select {
+  @apply w-full rounded-lg border-2 border-border bg-surface-raised px-3 py-2 text-text outline-none transition-colors appearance-none cursor-pointer;
+  min-height: 44px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23888888' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  padding-right: 2.5rem;
+}
+.select:focus {
+  @apply border-primary;
+}
+
+/* Badge / pill */
+.badge {
+  @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider;
+}
+.badge-success {
+  @apply bg-success/20 text-success;
+}
+.badge-danger {
+  @apply bg-danger/20 text-danger;
+}
+.badge-accent {
+  @apply bg-accent/20 text-accent;
+}
+.badge-highlight {
+  @apply bg-highlight/20 text-highlight;
+}
+.badge-primary {
+  @apply bg-primary/20 text-primary;
+}
+
+/* Prose styling for markdown docs */
+.prose-branded {
+  @apply leading-relaxed;
+}
+.prose-branded h1 {
+  @apply text-3xl font-extrabold text-primary mt-8 mb-4;
+}
+.prose-branded h2 {
+  @apply text-2xl font-extrabold text-highlight mt-8 mb-3 uppercase tracking-wider;
+}
+.prose-branded h3 {
+  @apply text-xl font-bold text-accent mt-6 mb-2;
+}
+.prose-branded h4 {
+  @apply text-lg font-bold text-secondary mt-4 mb-2;
+}
+.prose-branded p {
+  @apply mb-4 text-text/90;
+}
+.prose-branded a {
+  @apply text-primary underline underline-offset-2 hover:text-accent transition-colors;
+}
+.prose-branded code {
+  @apply bg-surface-raised text-accent px-1.5 py-0.5 rounded text-sm;
+}
+.prose-branded pre {
+  @apply bg-surface-raised border-2 border-border rounded-xl p-4 overflow-x-auto my-4;
+}
+.prose-branded pre code {
+  @apply bg-transparent p-0;
+}
+.prose-branded ul {
+  @apply list-disc list-inside mb-4 space-y-1;
+}
+.prose-branded ol {
+  @apply list-decimal list-inside mb-4 space-y-1;
+}
+.prose-branded li {
+  @apply text-text/90;
+}
+.prose-branded blockquote {
+  @apply border-l-4 border-highlight pl-4 italic text-text-muted my-4;
+}
+.prose-branded table {
+  @apply w-full border-collapse my-4;
+}
+.prose-branded th {
+  @apply bg-surface-raised border-2 border-border px-3 py-2 text-left font-bold text-primary text-sm uppercase tracking-wider;
+}
+.prose-branded td {
+  @apply border-2 border-border px-3 py-2 text-sm;
+}
+.prose-branded tr:hover td {
+  @apply bg-surface-raised/50;
+}
+.prose-branded hr {
+  @apply border-border my-8;
+}
+.prose-branded strong {
+  @apply text-text font-bold;
+}
+.prose-branded img {
+  @apply rounded-xl my-4;
+}
+
+/* Console minimal scrollbar */
+.console-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+.console-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.console-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+}
+.console-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+.console-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}

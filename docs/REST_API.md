@@ -29,6 +29,12 @@ All request and response bodies are JSON (`application/json`) unless otherwise n
 | PUT | `/api/wifi` | Update Wi-Fi config (merge) |
 | GET | `/api/defaults` | Read defaults (touch, mouse) |
 | PUT | `/api/defaults` | Update defaults (touch, mouse; merge) |
+| GET | `/api/recording` | Read recording config |
+| PUT | `/api/recording` | Update recording config (merge) |
+| GET | `/api/recordings` | List all recording WAV files |
+| GET | `/api/recordings/download?file=...` | Download a recording WAV file |
+| GET | `/api/recordings/delete?file=...` | Delete a recording WAV file |
+| GET | `/recordings` | Recordings management web UI (HTML) |
 | PUT | `/api/active-mode` | Set the active mode |
 | GET | `/api/boot-mode` | Read boot-mode definition |
 | GET | `/api/global-bindings` | Read global bindings |
@@ -429,6 +435,112 @@ Update defaults. Uses **merge** semantics -- only the fields you send are overwr
 ```json
 { "ok": true, "updated": true }
 ```
+
+---
+
+## Recording Endpoints
+
+### `GET /api/recording`
+
+Read the current SD card recording settings.
+
+**Response:**
+
+```json
+{
+  "enabled": false,
+  "format": "wav"
+}
+```
+
+When `enabled` is `true`, every `mic_gate` activation also writes a WAV file (48kHz, 16-bit, mono) to the SD card at `/sdcard/recordings/<modeId>/<sessionId>_<uptimeSec>.wav`. Recordings are accessed over HTTP, not via USB drive browsing.
+
+### `PUT /api/recording`
+
+Update recording settings. Uses **merge** semantics -- only the fields you send are overwritten.
+
+**Request body (enable recording):**
+
+```json
+{
+  "enabled": true
+}
+```
+
+**Request body (disable recording):**
+
+```json
+{
+  "enabled": false
+}
+```
+
+**Success response:**
+
+```json
+{ "ok": true, "updated": true }
+```
+
+**curl example:**
+
+```bash
+curl -X PUT http://walkey-talkey.local/api/recording \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": true}'
+```
+
+---
+
+## Recording File Endpoints
+
+Recordings are served over Wi-Fi via these endpoints. They are **not** accessed via USB Mass Storage.
+
+### `GET /api/recordings`
+
+List all recording WAV files on the SD card.
+
+**Response:**
+
+```json
+{
+  "recordings": [
+    { "path": "whisper/ABC123_00042.wav", "size": 344300 },
+    { "path": "whisper/ABC123_00058.wav", "size": 750380 }
+  ]
+}
+```
+
+### `GET /api/recordings/download?file=<path>`
+
+Stream a recording WAV file. The `file` parameter is the relative path from the listing.
+
+**Example:**
+
+```bash
+curl -o recording.wav "http://walkey-talkey.local/api/recordings/download?file=whisper/ABC123_00042.wav"
+```
+
+**Response:** Binary WAV data with `Content-Type: audio/wav`, streamed in chunks.
+
+### `GET /api/recordings/delete?file=<path>`
+
+Delete a recording from the SD card.
+
+**Example:**
+
+```bash
+curl "http://walkey-talkey.local/api/recordings/delete?file=whisper/ABC123_00042.wav"
+```
+
+**Response:**
+
+```json
+{ "ok": true }
+```
+
+### `GET /recordings`
+
+Web UI page for browsing, playing, downloading, and deleting recordings. Returns an HTML page.
 
 ---
 

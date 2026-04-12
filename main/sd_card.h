@@ -11,8 +11,6 @@
 
 esp_err_t sd_card_init(void);
 bool sd_card_is_present(void);
-esp_err_t sd_card_mount(void);
-esp_err_t sd_card_unmount(void);
 sdmmc_card_t *sd_card_get_card(void);
 
 uint32_t sd_card_block_count(void);

@@ -19,6 +19,7 @@ bool mode_controller_cycle_mode(mode_controller_t *controller, mode_cycle_direct
 bool mode_controller_is_boot_mode_active(const mode_controller_t *controller);
 mode_id_t mode_controller_get_active_mode(const mode_controller_t *controller);
 const char *mode_controller_get_active_mode_label(const mode_controller_t *controller);
+const char *mode_controller_get_active_mode_name(const mode_controller_t *controller);
 const char *mode_controller_get_previous_mode_label(const mode_controller_t *controller);
 const char *mode_controller_get_next_mode_label(const mode_controller_t *controller);
 const mode_boot_mode_t *mode_controller_get_boot_mode(const mode_controller_t *controller);

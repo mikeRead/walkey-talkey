@@ -1,5 +1,7 @@
 #include "mode_controller.h"
 
+#include "device_log.h"
+
 /* Virtual mouse mode: hardcoded, not in JSON config. */
 static const mode_definition_t s_mouse_mode_def = {
     .id = MODE_ID_MOUSE,
@@ -129,6 +131,12 @@ bool mode_controller_set_mode(mode_controller_t *controller, mode_id_t mode)
 
     bool changed = controller->active_mode != mode;
     controller->active_mode = mode;
+
+    if (changed) {
+        const mode_definition_t *def = mode_controller_find_mode(controller, mode);
+        device_log("ACTION", "Mode switched to %s", (def && def->label) ? def->label : "Unknown");
+    }
+
     return changed;
 }
 
@@ -159,6 +167,12 @@ const char *mode_controller_get_active_mode_label(const mode_controller_t *contr
 {
     const mode_definition_t *mode = mode_controller_find_mode(controller, mode_controller_get_active_mode(controller));
     return (mode != NULL) ? mode->label : "Unknown";
+}
+
+const char *mode_controller_get_active_mode_name(const mode_controller_t *controller)
+{
+    const mode_definition_t *mode = mode_controller_find_mode(controller, mode_controller_get_active_mode(controller));
+    return (mode != NULL && mode->name != NULL) ? mode->name : "unknown";
 }
 
 const char *mode_controller_get_previous_mode_label(const mode_controller_t *controller)

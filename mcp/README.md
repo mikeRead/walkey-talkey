@@ -64,47 +64,56 @@ Override the device URL when needed:
 }
 ```
 
-## Available Tools (22)
+## Available Tools (27)
 
 ### Discovery
-- `walkey.ping` - Check device reachability
-- `walkey.get_config` - Get full configuration
-- `walkey.get_config_canonical` - Get schema-ordered configuration
-- `walkey.get_schema` - Get JSON config schema
+- `walkey_ping` - Check device reachability
+- `walkey_get_config` - Get full configuration
+- `walkey_get_config_canonical` - Get schema-ordered configuration
+- `walkey_get_schema` - Get JSON config schema
 
 ### Mode Management
-- `walkey.list_modes` - List all modes summary
-- `walkey.get_mode` - Get single mode by id
-- `walkey.set_mode` - Replace entire mode definition
-- `walkey.create_mode` - Add a new mode
-- `walkey.delete_mode` - Remove a mode
+- `walkey_list_modes` - List all modes summary
+- `walkey_get_mode` - Get single mode by id
+- `walkey_set_mode` - Replace entire mode definition
+- `walkey_create_mode` - Add a new mode
+- `walkey_delete_mode` - Remove a mode
 
 ### Binding Management
-- `walkey.get_bindings` - Get bindings for a mode
-- `walkey.set_binding` - Add/replace a binding in a mode
-- `walkey.remove_binding` - Remove a binding from a mode
+- `walkey_get_bindings` - Get bindings for a mode
+- `walkey_set_binding` - Add/replace a binding in a mode
+- `walkey_remove_binding` - Remove a binding from a mode
 
 ### Wi-Fi
-- `walkey.get_wifi` - Get Wi-Fi settings (read-only)
+- `walkey_get_wifi` - Get Wi-Fi settings (read-only)
 
 ### Defaults
-- `walkey.get_defaults` - Get touch defaults
-- `walkey.set_defaults` - Update touch defaults
+- `walkey_get_defaults` - Get touch defaults
+- `walkey_set_defaults` - Update touch defaults
+
+### Recording Config
+- `walkey_get_recording` - Get SD card recording settings
+- `walkey_set_recording` - Enable/disable SD card recording
+
+### Recording Files
+- `walkey_list_recordings` - List all recording WAV files
+- `walkey_download_recording` - Get download URL for a recording
+- `walkey_delete_recording` - Delete a recording from SD card
 
 ### Active Mode
-- `walkey.get_active_mode` - Get current active mode
-- `walkey.set_active_mode` - Switch active mode
+- `walkey_get_active_mode` - Get current active mode
+- `walkey_set_active_mode` - Switch active mode
 
 ### BOOT Menu
-- `walkey.get_boot_mode` - Get BOOT menu definition
+- `walkey_get_boot_mode` - Get BOOT menu definition
 
 ### Global
-- `walkey.get_global_bindings` - Get global bindings
+- `walkey_get_global_bindings` - Get global bindings
 
 ### Escape Hatch
-- `walkey.set_config` - Replace entire configuration
-- `walkey.validate_config` - Validate without saving
-- `walkey.reset_config` - Factory reset
+- `walkey_set_config` - Replace entire configuration
+- `walkey_validate_config` - Validate without saving
+- `walkey_reset_config` - Factory reset
 
 ## How It Works
 

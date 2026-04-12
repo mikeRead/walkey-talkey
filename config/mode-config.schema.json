@@ -91,6 +91,15 @@
         }
       }
     },
+    "recording": {
+      "type": "object",
+      "description": "SD card recording settings. When enabled, mic_gate activations write a WAV file to /sdcard/recordings/<modeId>/<sessionId>_<uptimeSec>.wav.",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": false, "description": "Master toggle for SD card recording on mic_gate activation." },
+        "format": { "type": "string", "enum": ["wav"], "default": "wav", "description": "Audio file format. Only wav is currently supported." }
+      }
+    },
     "globalBindings": {
       "description": "Bindings that stay active regardless of the selected mode.",
       "$ref": "#/$defs/bindings"
@@ -292,12 +301,13 @@
           }
         },
         {
-          "description": "Set the microphone gate state explicitly.",
+          "description": "Set the microphone gate state explicitly. Optional recording field overrides the global recording setting for this activation.",
           "additionalProperties": false,
           "required": ["type", "enabled"],
           "properties": {
             "type": { "const": "mic_gate" },
-            "enabled": { "type": "boolean" }
+            "enabled": { "type": "boolean" },
+            "recording": { "type": "boolean", "description": "Override global recording.enabled for this mic_gate activation. Only meaningful when enabled is true." }
           }
         },
         {

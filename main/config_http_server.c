@@ -1,9 +1,13 @@
 #include "config_http_server.h"
 
+#include <dirent.h>
+#include <errno.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <sys/unistd.h>
 
 #include "cJSON.h"
 #include "freertos/FreeRTOS.h"
@@ -20,9 +24,11 @@
 #include "esp_wifi.h"
 #include "mdns.h"
 #include "nvs_flash.h"
+#include "device_log.h"
+#include "sd_card.h"
 
 #define CONFIG_HTTP_MAX_BODY_BYTES (32 * 1024)
-#define CONFIG_HTTP_SERVER_STACK_SIZE 6144
+#define CONFIG_HTTP_SERVER_STACK_SIZE 4096
 #define CONFIG_HTTP_RESPONSE_CHUNK_BYTES 1024
 #define CONFIG_HTTP_DEFAULT_AP_SSID "walkey-talkey"
 #define CONFIG_HTTP_DEFAULT_AP_PASSWORD "secretKEY"
@@ -161,7 +167,7 @@ static const char *s_web_ui_html =
     "  <main>\n"
     "    <h1>WalKEY-TalKEY Config</h1>\n"
     "    <p>Edit the canonical mode JSON, validate it, save it, or restore the built-in firmware defaults.</p>\n"
-    "    <p><strong>Documentation:</strong> <a href=\"/downloads/mode-config.schema.json\" target=\"_blank\" rel=\"noopener\">mode-config.schema.json</a> | <a href=\"/downloads/AI_GUIDE.md\" target=\"_blank\" rel=\"noopener\">AI_GUIDE.md</a> | <a href=\"/downloads/USER_GUIDE.md\" target=\"_blank\" rel=\"noopener\">USER_GUIDE.md</a></p>\n"
+    "    <p><strong>Documentation:</strong> <a href=\"/downloads/mode-config.schema.json\" target=\"_blank\" rel=\"noopener\">mode-config.schema.json</a> | <a href=\"/downloads/AI_GUIDE.md\" target=\"_blank\" rel=\"noopener\">AI_GUIDE.md</a> | <a href=\"/downloads/USER_GUIDE.md\" target=\"_blank\" rel=\"noopener\">USER_GUIDE.md</a> | <a href=\"/recordings\">Recordings</a></p>\n"
     "    <div class=\"row\">\n"
     "      <button id=\"reloadBtn\" class=\"secondary\">Reload</button>\n"
     "      <button id=\"validateBtn\">Validate</button>\n"
@@ -655,10 +661,19 @@ static char *config_http_wrap_storage_error(const char *status_name, const mode_
     return buffer;
 }
 
+static void config_http_set_cors_headers(httpd_req_t *req)
+{
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Methods", "GET, PUT, POST, DELETE, OPTIONS");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Headers", "Content-Type, Range");
+    httpd_resp_set_hdr(req, "Access-Control-Expose-Headers", "Content-Range, Accept-Ranges, Content-Length");
+}
+
 static esp_err_t config_http_send_json(httpd_req_t *req, const char *status, const char *body)
 {
     httpd_resp_set_type(req, "application/json");
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    config_http_set_cors_headers(req);
     httpd_resp_set_status(req, status);
     return config_http_send_chunked_buffer(req, body, strlen(body));
 }
@@ -674,6 +689,7 @@ static esp_err_t config_http_send_streamed_config_payload(httpd_req_t *req,
 
     httpd_resp_set_type(req, "application/json");
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    config_http_set_cors_headers(req);
     httpd_resp_set_status(req, status);
 
     ESP_RETURN_ON_ERROR(httpd_resp_send_chunk(req, "{\"ok\":true,", HTTPD_RESP_USE_STRLEN),
@@ -754,19 +770,27 @@ static esp_err_t config_http_handle_root_get(httpd_req_t *req)
 {
     httpd_resp_set_type(req, "text/html");
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    config_http_set_cors_headers(req);
     return config_http_send_chunked_buffer(req, s_web_ui_html, strlen(s_web_ui_html));
 }
 
 static esp_err_t config_http_handle_portal_get(httpd_req_t *req)
 {
-    httpd_resp_set_type(req, "text/html");
-    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
-    return config_http_send_chunked_buffer(req, s_web_ui_html, strlen(s_web_ui_html));
+    return config_http_handle_root_get(req);
+}
+
+static esp_err_t config_http_handle_cors_preflight(httpd_req_t *req)
+{
+    config_http_set_cors_headers(req);
+    httpd_resp_set_status(req, "204 No Content");
+    httpd_resp_set_hdr(req, "Access-Control-Max-Age", "86400");
+    return httpd_resp_send(req, NULL, 0);
 }
 
 static esp_err_t config_http_handle_ping(httpd_req_t *req)
 {
     httpd_resp_set_type(req, "text/plain");
+    config_http_set_cors_headers(req);
     return config_http_send_chunked_buffer(req, "ok", 2);
 }
 
@@ -786,6 +810,7 @@ static esp_err_t config_http_send_embedded_download(httpd_req_t *req,
 
     httpd_resp_set_type(req, content_type);
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    config_http_set_cors_headers(req);
     return config_http_send_chunked_buffer(req, (const char *)data_start, data_len);
 }
 
@@ -1232,6 +1257,7 @@ static esp_err_t config_http_server_start_sta(void)
                                            pdMS_TO_TICKS(CONFIG_HTTP_STA_CONNECT_TIMEOUT_MS));
     if ((bits & CONFIG_HTTP_STA_CONNECTED_BIT) != 0) {
         s_wifi_ready = true;
+        device_log("INFO", "Wi-Fi connected -- %s", s_display_address);
         return ESP_OK;
     }
 
@@ -1409,6 +1435,7 @@ static esp_err_t api_send_cjson(httpd_req_t *req, cJSON *obj)
     }
     httpd_resp_set_type(req, "application/json");
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    config_http_set_cors_headers(req);
     esp_err_t err = config_http_send_chunked_buffer(req, text, strlen(text));
     cJSON_free(text);
     return err;
@@ -1553,7 +1580,6 @@ static esp_err_t config_http_handle_api_put_mode(httpd_req_t *req)
         cJSON_Delete(root);
         return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Mode not found");
     }
-
     esp_err_t err = api_save_and_reload(req, root);
     if (err != ESP_OK) return err;
     return config_http_send_json(req, "200 OK", "{\"ok\":true,\"updated\":true}");
@@ -1634,7 +1660,6 @@ static esp_err_t config_http_handle_api_delete_mode(httpd_req_t *req)
         cJSON_Delete(root);
         return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Mode not found");
     }
-
     esp_err_t err = api_save_and_reload(req, root);
     if (err != ESP_OK) return err;
     return config_http_send_json(req, "200 OK", "{\"ok\":true,\"deleted\":true}");
@@ -1765,6 +1790,495 @@ static esp_err_t config_http_handle_api_put_defaults(httpd_req_t *req)
 }
 
 /* ---------------------------------------------------------------------------
+ * GET /recordings -- web UI for browsing/downloading/deleting recordings
+ * ------------------------------------------------------------------------ */
+
+static const char *s_recordings_html =
+    "<!doctype html>\n"
+    "<html lang=\"en\">\n"
+    "<head>\n"
+    "  <meta charset=\"utf-8\">\n"
+    "  <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\n"
+    "  <title>WalKEY-TalKEY Recordings</title>\n"
+    "  <style>\n"
+    "    :root { color-scheme: dark; }\n"
+    "    body { margin: 0; font-family: monospace; background: #111827; color: #e5e7eb; }\n"
+    "    main { max-width: 980px; margin: 0 auto; padding: 24px; }\n"
+    "    h1 { font-size: 22px; margin: 0 0 4px; }\n"
+    "    .subtitle { color: #9ca3af; margin: 0 0 16px; }\n"
+    "    a { color: #93c5fd; }\n"
+    "    .toolbar { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; align-items: center; }\n"
+    "    button { border: 0; border-radius: 8px; padding: 10px 14px; background: #2563eb; color: #fff; cursor: pointer; font-family: monospace; font-size: 13px; }\n"
+    "    button.secondary { background: #374151; }\n"
+    "    button.danger { background: #b91c1c; }\n"
+    "    button.active { background: #15803d; }\n"
+    "    button.small { padding: 6px 10px; font-size: 12px; }\n"
+    "    button:disabled { opacity: .4; cursor: default; }\n"
+    "    .status { color: #86efac; font-size: 13px; }\n"
+    "    .live-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #4ade80; margin-right: 6px; animation: pulse 1.5s infinite; vertical-align: middle; }\n"
+    "    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }\n"
+    "    table { width: 100%; border-collapse: collapse; }\n"
+    "    th { text-align: left; color: #9ca3af; padding: 8px 12px; border-bottom: 1px solid #374151; font-size: 12px; text-transform: uppercase; letter-spacing: .5px; }\n"
+    "    td { padding: 10px 12px; border-bottom: 1px solid #1f2937; }\n"
+    "    tr:hover td { background: #1f2937; }\n"
+    "    .fname { color: #93c5fd; word-break: break-all; }\n"
+    "    .fsize { color: #fca5a5; white-space: nowrap; }\n"
+    "    .actions { display: flex; gap: 6px; }\n"
+    "    .empty { color: #6b7280; text-align: center; padding: 48px 12px; }\n"
+    "    .player { margin-top: 16px; padding: 14px; border: 1px solid #374151; border-radius: 10px; background: #030712; display: none; }\n"
+    "    .player-title { color: #86efac; margin: 0 0 8px; font-size: 13px; }\n"
+    "    audio { width: 100%; }\n"
+    "  </style>\n"
+    "</head>\n"
+    "<body>\n"
+    "  <main>\n"
+    "    <h1>WalKEY-TalKEY Recordings</h1>\n"
+    "    <p class=\"subtitle\"><a href=\"/\">&larr; Config</a> &nbsp;|&nbsp; Audio recordings on SD card</p>\n"
+    "    <div class=\"toolbar\">\n"
+    "      <button id=\"refreshBtn\" class=\"secondary\">Refresh</button>\n"
+    "      <button id=\"autoBtn\" class=\"active\">Auto</button>\n"
+    "      <button id=\"deleteAllBtn\" class=\"danger\">Delete All</button>\n"
+    "      <span id=\"status\" class=\"status\"></span>\n"
+    "    </div>\n"
+    "    <div id=\"player\" class=\"player\">\n"
+    "      <p class=\"player-title\" id=\"playerTitle\">Now playing:</p>\n"
+    "      <audio id=\"audio\" controls></audio>\n"
+    "    </div>\n"
+    "    <div id=\"list\"></div>\n"
+    "  </main>\n"
+    "  <script>\n"
+    "    const $list = document.getElementById('list');\n"
+    "    const $status = document.getElementById('status');\n"
+    "    const $player = document.getElementById('player');\n"
+    "    const $playerTitle = document.getElementById('playerTitle');\n"
+    "    const $audio = document.getElementById('audio');\n"
+    "    const $autoBtn = document.getElementById('autoBtn');\n"
+    "    let recordings = [];\n"
+    "    let autoRefresh = true;\n"
+    "    let pollTimer = null;\n"
+    "    const POLL_MS = 3000;\n"
+    "\n"
+    "    function fingerprint(list) {\n"
+    "      return list.map(function(r) { return r.path + ':' + r.size; }).join('|');\n"
+    "    }\n"
+    "\n"
+    "    function fmtSize(b) {\n"
+    "      if (b === 0) return '0 B';\n"
+    "      if (b < 1024) return b + ' B';\n"
+    "      if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';\n"
+    "      return (b / 1048576).toFixed(2) + ' MB';\n"
+    "    }\n"
+    "\n"
+    "    function fmtDuration(bytes) {\n"
+    "      var secs = Math.max(0, (bytes - 44)) / (48000 * 2);\n"
+    "      var m = Math.floor(secs / 60);\n"
+    "      var s = Math.floor(secs % 60);\n"
+    "      return m + ':' + (s < 10 ? '0' : '') + s;\n"
+    "    }\n"
+    "\n"
+    "    function render() {\n"
+    "      if (recordings.length === 0) {\n"
+    "        $list.innerHTML = '<p class=\"empty\">No recordings found.</p>';\n"
+    "        return;\n"
+    "      }\n"
+    "      var h = '<table><thead><tr><th>File</th><th>Size</th><th>Duration</th><th>Actions</th></tr></thead><tbody>';\n"
+    "      recordings.forEach(function(r) {\n"
+    "        h += '<tr>';\n"
+    "        h += '<td class=\"fname\">' + r.path + '</td>';\n"
+    "        h += '<td class=\"fsize\">' + fmtSize(r.size) + '</td>';\n"
+    "        h += '<td class=\"fsize\">' + fmtDuration(r.size) + '</td>';\n"
+    "        h += '<td class=\"actions\">';\n"
+    "        if (r.size > 0) {\n"
+    "          h += '<button class=\"small secondary\" onclick=\"playRec(\\'' + r.path + '\\')\">&#9654; Play</button>';\n"
+    "          h += '<button class=\"small\" onclick=\"dlRec(\\'' + r.path + '\\')\">&darr; Download</button>';\n"
+    "        }\n"
+    "        h += '<button class=\"small danger\" onclick=\"delRec(\\'' + r.path + '\\')\">&times; Delete</button>';\n"
+    "        h += '</td></tr>';\n"
+    "      });\n"
+    "      h += '</tbody></table>';\n"
+    "      $list.innerHTML = h;\n"
+    "    }\n"
+    "\n"
+    "    function statusText() {\n"
+    "      var s = recordings.length + ' recording(s)';\n"
+    "      if (autoRefresh) s = '<span class=\"live-dot\"></span>' + s;\n"
+    "      return s;\n"
+    "    }\n"
+    "\n"
+    "    async function loadList() {\n"
+    "      $status.textContent = 'Loading...';\n"
+    "      try {\n"
+    "        var resp = await fetch('/api/recordings');\n"
+    "        var data = await resp.json();\n"
+    "        var fresh = data.recordings || [];\n"
+    "        fresh.sort(function(a, b) { return a.path < b.path ? -1 : 1; });\n"
+    "        recordings = fresh;\n"
+    "        $status.innerHTML = statusText();\n"
+    "        render();\n"
+    "      } catch (e) {\n"
+    "        $status.textContent = 'Error: ' + e.message;\n"
+    "      }\n"
+    "    }\n"
+    "\n"
+    "    async function poll() {\n"
+    "      try {\n"
+    "        var resp = await fetch('/api/recordings');\n"
+    "        var data = await resp.json();\n"
+    "        var fresh = data.recordings || [];\n"
+    "        fresh.sort(function(a, b) { return a.path < b.path ? -1 : 1; });\n"
+    "        if (fingerprint(fresh) !== fingerprint(recordings)) {\n"
+    "          recordings = fresh;\n"
+    "          $status.innerHTML = statusText();\n"
+    "          render();\n"
+    "        }\n"
+    "      } catch (e) { /* silent retry next cycle */ }\n"
+    "    }\n"
+    "\n"
+    "    function startPoll() {\n"
+    "      if (pollTimer) return;\n"
+    "      pollTimer = setInterval(poll, POLL_MS);\n"
+    "    }\n"
+    "    function stopPoll() {\n"
+    "      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }\n"
+    "    }\n"
+    "\n"
+    "    function updateAutoBtn() {\n"
+    "      $autoBtn.textContent = autoRefresh ? 'Auto \\u25cf' : 'Auto';\n"
+    "      $autoBtn.className = autoRefresh ? 'active' : 'secondary';\n"
+    "      $status.innerHTML = statusText();\n"
+    "    }\n"
+    "\n"
+    "    $autoBtn.onclick = function() {\n"
+    "      autoRefresh = !autoRefresh;\n"
+    "      updateAutoBtn();\n"
+    "      if (autoRefresh) { poll(); startPoll(); } else { stopPoll(); }\n"
+    "    };\n"
+    "\n"
+    "    function playRec(path) {\n"
+    "      $audio.src = '/api/recordings/download?file=' + path;\n"
+    "      $playerTitle.textContent = 'Now playing: ' + path;\n"
+    "      $player.style.display = 'block';\n"
+    "      $audio.play();\n"
+    "    }\n"
+    "\n"
+    "    function dlRec(path) {\n"
+    "      var a = document.createElement('a');\n"
+    "      a.href = '/api/recordings/download?file=' + path;\n"
+    "      a.download = path.split('/').pop();\n"
+    "      a.click();\n"
+    "    }\n"
+    "\n"
+    "    async function delRec(path) {\n"
+    "      if (!confirm('Delete ' + path + '?')) return;\n"
+    "      $status.textContent = 'Deleting...';\n"
+    "      try {\n"
+    "        await fetch('/api/recordings/delete?file=' + path);\n"
+    "        await loadList();\n"
+    "      } catch (e) {\n"
+    "        $status.textContent = 'Error: ' + e.message;\n"
+    "      }\n"
+    "    }\n"
+    "\n"
+    "    document.getElementById('refreshBtn').onclick = loadList;\n"
+    "\n"
+    "    document.getElementById('deleteAllBtn').onclick = async function() {\n"
+    "      if (!confirm('Delete ALL ' + recordings.length + ' recording(s)?')) return;\n"
+    "      $status.textContent = 'Deleting all...';\n"
+    "      for (var i = 0; i < recordings.length; i++) {\n"
+    "        try {\n"
+    "          await fetch('/api/recordings/delete?file=' + recordings[i].path);\n"
+    "        } catch (e) { /* continue */ }\n"
+    "      }\n"
+    "      await loadList();\n"
+    "    };\n"
+    "\n"
+    "    loadList().then(function() { if (autoRefresh) startPoll(); });\n"
+    "  </script>\n"
+    "</body>\n"
+    "</html>\n";
+
+static esp_err_t config_http_handle_recordings_page(httpd_req_t *req)
+{
+    httpd_resp_set_type(req, "text/html");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    config_http_set_cors_headers(req);
+    return config_http_send_chunked_buffer(req, s_recordings_html, strlen(s_recordings_html));
+}
+
+/* ---------------------------------------------------------------------------
+ * GET /api/recordings -- list recording files on SD card
+ * ------------------------------------------------------------------------ */
+
+#define RECORDINGS_DIR SD_CARD_MOUNT_POINT "/recordings"
+
+static esp_err_t config_http_handle_api_get_recordings(httpd_req_t *req)
+{
+    cJSON *root = cJSON_CreateObject();
+    cJSON *arr = cJSON_AddArrayToObject(root, "recordings");
+
+    DIR *mode_dir = opendir(RECORDINGS_DIR);
+    if (!mode_dir) {
+        if (!sd_card_is_present()) {
+            cJSON_AddStringToObject(root, "error", "no_sd_card");
+        } else {
+            cJSON_AddStringToObject(root, "error", "no_recordings_dir");
+        }
+    } else {
+        struct dirent *mode_ent;
+        while ((mode_ent = readdir(mode_dir)) != NULL) {
+            if (mode_ent->d_name[0] == '.') continue;
+
+            char sub_path[128];
+            snprintf(sub_path, sizeof(sub_path), RECORDINGS_DIR "/%s", mode_ent->d_name);
+
+            /* d_type may be DT_UNKNOWN on some FAT VFS -- fall back to stat */
+            bool is_dir = (mode_ent->d_type == DT_DIR);
+            if (mode_ent->d_type == DT_UNKNOWN) {
+                struct stat st;
+                is_dir = (stat(sub_path, &st) == 0 && S_ISDIR(st.st_mode));
+            }
+            if (!is_dir) continue;
+
+            DIR *wav_dir = opendir(sub_path);
+            if (!wav_dir) continue;
+
+            struct dirent *wav_ent;
+            while ((wav_ent = readdir(wav_dir)) != NULL) {
+                /* Skip directories (with DT_UNKNOWN fallback) */
+                bool entry_is_dir = (wav_ent->d_type == DT_DIR);
+                if (wav_ent->d_type == DT_UNKNOWN) {
+                    char tmp_path[192];
+                    snprintf(tmp_path, sizeof(tmp_path), "%s/%s", sub_path, wav_ent->d_name);
+                    struct stat tmp_st;
+                    entry_is_dir = (stat(tmp_path, &tmp_st) == 0 && S_ISDIR(tmp_st.st_mode));
+                }
+                if (entry_is_dir) continue;
+
+                size_t nlen = strlen(wav_ent->d_name);
+                if (nlen < 5) continue;
+
+                char file_path[192];
+                snprintf(file_path, sizeof(file_path), "%s/%s", sub_path, wav_ent->d_name);
+                struct stat st;
+                if (stat(file_path, &st) != 0) continue;
+
+                char rel_path[128];
+                snprintf(rel_path, sizeof(rel_path), "%s/%s", mode_ent->d_name, wav_ent->d_name);
+
+                cJSON *entry = cJSON_CreateObject();
+                cJSON_AddStringToObject(entry, "path", rel_path);
+                cJSON_AddNumberToObject(entry, "size", (double)st.st_size);
+                cJSON_AddItemToArray(arr, entry);
+            }
+            closedir(wav_dir);
+        }
+        closedir(mode_dir);
+    }
+
+    char *json_str = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    if (!json_str) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "JSON alloc failed");
+    }
+    esp_err_t err = config_http_send_json(req, "200 OK", json_str);
+    cJSON_free(json_str);
+    return err;
+}
+
+/* ---------------------------------------------------------------------------
+ * GET /api/recordings/download?file=<relative_path> -- stream a WAV file
+ * ------------------------------------------------------------------------ */
+
+static esp_err_t config_http_handle_api_download_recording(httpd_req_t *req)
+{
+    char query[192] = {0};
+    if (httpd_req_get_url_query_str(req, query, sizeof(query)) != ESP_OK) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing ?file= parameter");
+    }
+    char file_param[128] = {0};
+    if (httpd_query_key_value(query, "file", file_param, sizeof(file_param)) != ESP_OK) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing ?file= parameter");
+    }
+
+    if (strstr(file_param, "..") != NULL) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid path");
+    }
+
+    char full_path[256];
+    snprintf(full_path, sizeof(full_path), RECORDINGS_DIR "/%s", file_param);
+
+    FILE *f = fopen(full_path, "rb");
+    if (!f) {
+        return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "File not found");
+    }
+
+    fseek(f, 0, SEEK_END);
+    long file_size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+
+    if (file_size <= 0) {
+        fclose(f);
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Empty file");
+    }
+
+    httpd_resp_set_type(req, "audio/wav");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    httpd_resp_set_hdr(req, "Accept-Ranges", "bytes");
+    config_http_set_cors_headers(req);
+
+    char range_hdr[64] = {0};
+    if (httpd_req_get_hdr_value_str(req, "Range", range_hdr, sizeof(range_hdr)) == ESP_OK) {
+        long rs = 0, re = 0;
+        int parsed = sscanf(range_hdr, "bytes=%ld-%ld", &rs, &re);
+        if (parsed >= 1) {
+            long range_start = (rs >= 0) ? rs : 0;
+            long range_end = (parsed >= 2 && re > 0 && re < file_size) ? re : (file_size - 1);
+            if (range_start > range_end) {
+                range_start = 0;
+            }
+            long content_length = range_end - range_start + 1;
+
+            char *buf = heap_caps_malloc((size_t)content_length, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+            if (buf == NULL) {
+                buf = malloc((size_t)content_length);
+            }
+            if (buf == NULL) {
+                fclose(f);
+                return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Out of memory");
+            }
+
+            fseek(f, range_start, SEEK_SET);
+            size_t nread = fread(buf, 1, (size_t)content_length, f);
+            fclose(f);
+
+            char cr_str[64];
+            snprintf(cr_str, sizeof(cr_str), "bytes %ld-%ld/%ld", range_start, range_end, file_size);
+            httpd_resp_set_hdr(req, "Content-Range", cr_str);
+            httpd_resp_set_status(req, "206 Partial Content");
+
+            esp_err_t err = httpd_resp_send(req, buf, (ssize_t)nread);
+            free(buf);
+            return err;
+        }
+    }
+
+    char buf[1024];
+    size_t nread;
+    while ((nread = fread(buf, 1, sizeof(buf), f)) > 0) {
+        if (httpd_resp_send_chunk(req, buf, nread) != ESP_OK) {
+            fclose(f);
+            httpd_resp_send_chunk(req, NULL, 0);
+            return ESP_FAIL;
+        }
+    }
+    fclose(f);
+    httpd_resp_send_chunk(req, NULL, 0);
+    return ESP_OK;
+}
+
+/* ---------------------------------------------------------------------------
+ * GET /api/recordings/delete?file=<relative_path> -- delete a recording
+ * ------------------------------------------------------------------------ */
+
+static esp_err_t config_http_handle_api_delete_recording(httpd_req_t *req)
+{
+    char query[192] = {0};
+    if (httpd_req_get_url_query_str(req, query, sizeof(query)) != ESP_OK) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing ?file= parameter");
+    }
+    char file_param[128] = {0};
+    if (httpd_query_key_value(query, "file", file_param, sizeof(file_param)) != ESP_OK) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing ?file= parameter");
+    }
+
+    if (strstr(file_param, "..") != NULL) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid path");
+    }
+
+    char full_path[256];
+    snprintf(full_path, sizeof(full_path), RECORDINGS_DIR "/%s", file_param);
+
+    struct stat st;
+    if (stat(full_path, &st) != 0) {
+        return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "File not found");
+    }
+    if (remove(full_path) != 0) {
+        ESP_LOGE(TAG, "remove('%s') failed: %s", full_path, strerror(errno));
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to delete file");
+    }
+
+    return config_http_send_json(req, "200 OK", "{\"ok\":true}");
+}
+
+/* ---------------------------------------------------------------------------
+ * GET /api/recording -- read recording config
+ * ------------------------------------------------------------------------ */
+
+static esp_err_t config_http_handle_api_get_recording(httpd_req_t *req)
+{
+    cJSON *root = api_load_config_root();
+    if (!root) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to read config");
+    }
+    cJSON *recording = cJSON_DetachItemFromObject(root, "recording");
+    cJSON_Delete(root);
+    if (!recording) {
+        recording = cJSON_CreateObject();
+        cJSON_AddBoolToObject(recording, "enabled", 0);
+        cJSON_AddStringToObject(recording, "format", "wav");
+    }
+    esp_err_t err = api_send_cjson(req, recording);
+    cJSON_Delete(recording);
+    return err;
+}
+
+/* ---------------------------------------------------------------------------
+ * PUT /api/recording -- update recording config (merge)
+ * ------------------------------------------------------------------------ */
+
+static esp_err_t config_http_handle_api_put_recording(httpd_req_t *req)
+{
+    char *body = NULL;
+    if (config_http_read_request_body(req, &body) != ESP_OK) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Expected JSON body");
+    }
+    cJSON *patch = cJSON_Parse(body);
+    free(body);
+    if (!patch) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
+    }
+
+    cJSON *root = api_load_config_root();
+    if (!root) {
+        cJSON_Delete(patch);
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to read config");
+    }
+
+    cJSON *recording = cJSON_GetObjectItem(root, "recording");
+    if (!recording) {
+        cJSON *new_rec = cJSON_CreateObject();
+        cJSON_AddBoolToObject(new_rec, "enabled", 0);
+        cJSON_AddStringToObject(new_rec, "format", "wav");
+        cJSON_AddItemToObject(root, "recording", new_rec);
+        recording = new_rec;
+    }
+
+    cJSON *child = patch->child;
+    while (child) {
+        cJSON *next = child->next;
+        cJSON *dup = cJSON_Duplicate(child, 1);
+        cJSON_DeleteItemFromObject(recording, child->string);
+        cJSON_AddItemToObject(recording, child->string, dup);
+        child = next;
+    }
+    cJSON_Delete(patch);
+
+    esp_err_t err = api_save_and_reload(req, root);
+    if (err != ESP_OK) return err;
+    return config_http_send_json(req, "200 OK", "{\"ok\":true,\"updated\":true}");
+}
+
+/* ---------------------------------------------------------------------------
  * PUT /api/active-mode -- set active mode
  * ------------------------------------------------------------------------ */
 
@@ -1841,6 +2355,25 @@ static esp_err_t config_http_handle_api_get_global_bindings(httpd_req_t *req)
     return err;
 }
 
+static esp_err_t config_http_handle_api_get_logs(httpd_req_t *req)
+{
+    char *buf = config_http_calloc_prefer_psram(8192);
+    if (buf == NULL) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Out of memory");
+    }
+    int len = device_log_get_json(buf, 8192);
+    if (len < 0) {
+        free(buf);
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Log serialization failed");
+    }
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    config_http_set_cors_headers(req);
+    esp_err_t err = config_http_send_chunked_buffer(req, buf, (size_t)len);
+    free(buf);
+    return err;
+}
+
 esp_err_t config_http_server_start(config_http_reload_fn_t reload_fn,
                                    void *reload_user_data,
                                    config_http_notify_fn_t notify_ui_fn,
@@ -1860,10 +2393,11 @@ esp_err_t config_http_server_start(config_http_reload_fn_t reload_fn,
     ESP_RETURN_ON_ERROR(config_http_server_apply_wifi(wifi), TAG, "Wi-Fi init failed");
 
     httpd_config_t server_config = HTTPD_DEFAULT_CONFIG();
-    server_config.max_uri_handlers = 24;
+    server_config.max_uri_handlers = 54;
     server_config.stack_size = CONFIG_HTTP_SERVER_STACK_SIZE;
 
     ESP_RETURN_ON_ERROR(httpd_start(&s_http_server, &server_config), TAG, "HTTP server start failed");
+    device_log("INFO", "HTTP server started on port 80");
 
     static const httpd_uri_t root_uri = {
         .uri = "/",
@@ -1932,6 +2466,24 @@ esp_err_t config_http_server_start(config_http_reload_fn_t reload_fn,
         .user_ctx = NULL,
     };
 
+    static const httpd_uri_t options_config_uri       = { .uri = "/config",              .method = HTTP_OPTIONS, .handler = config_http_handle_cors_preflight };
+    static const httpd_uri_t options_config_can_uri  = { .uri = "/config/canonical",    .method = HTTP_OPTIONS, .handler = config_http_handle_cors_preflight };
+    static const httpd_uri_t options_config_val_uri  = { .uri = "/config/validate",     .method = HTTP_OPTIONS, .handler = config_http_handle_cors_preflight };
+    static const httpd_uri_t options_config_rst_uri  = { .uri = "/config/reset",        .method = HTTP_OPTIONS, .handler = config_http_handle_cors_preflight };
+    static const httpd_uri_t options_modes_uri       = { .uri = "/api/modes",           .method = HTTP_OPTIONS, .handler = config_http_handle_cors_preflight };
+    static const httpd_uri_t options_mode_uri        = { .uri = "/api/mode",            .method = HTTP_OPTIONS, .handler = config_http_handle_cors_preflight };
+    static const httpd_uri_t options_wifi_uri        = { .uri = "/api/wifi",            .method = HTTP_OPTIONS, .handler = config_http_handle_cors_preflight };
+    static const httpd_uri_t options_defaults_uri    = { .uri = "/api/defaults",        .method = HTTP_OPTIONS, .handler = config_http_handle_cors_preflight };
+    static const httpd_uri_t options_recording_uri   = { .uri = "/api/recording",       .method = HTTP_OPTIONS, .handler = config_http_handle_cors_preflight };
+    static const httpd_uri_t options_recordings_uri  = { .uri = "/api/recordings",      .method = HTTP_OPTIONS, .handler = config_http_handle_cors_preflight };
+    static const httpd_uri_t options_rec_dl_uri      = { .uri = "/api/recordings/download", .method = HTTP_OPTIONS, .handler = config_http_handle_cors_preflight };
+    static const httpd_uri_t options_rec_del_uri     = { .uri = "/api/recordings/delete",   .method = HTTP_OPTIONS, .handler = config_http_handle_cors_preflight };
+    static const httpd_uri_t options_active_mode_uri = { .uri = "/api/active-mode",     .method = HTTP_OPTIONS, .handler = config_http_handle_cors_preflight };
+    static const httpd_uri_t options_boot_mode_uri   = { .uri = "/api/boot-mode",       .method = HTTP_OPTIONS, .handler = config_http_handle_cors_preflight };
+    static const httpd_uri_t options_global_bind_uri = { .uri = "/api/global-bindings", .method = HTTP_OPTIONS, .handler = config_http_handle_cors_preflight };
+    static const httpd_uri_t options_ping_uri        = { .uri = "/ping",                .method = HTTP_OPTIONS, .handler = config_http_handle_cors_preflight };
+    static const httpd_uri_t options_logs_uri        = { .uri = "/api/logs",             .method = HTTP_OPTIONS, .handler = config_http_handle_cors_preflight };
+
     static const httpd_uri_t api_get_modes_uri = { .uri = "/api/modes", .method = HTTP_GET, .handler = config_http_handle_api_get_modes };
     static const httpd_uri_t api_get_mode_uri = { .uri = "/api/mode", .method = HTTP_GET, .handler = config_http_handle_api_get_mode };
     static const httpd_uri_t api_put_mode_uri = { .uri = "/api/mode", .method = HTTP_PUT, .handler = config_http_handle_api_put_mode };
@@ -1941,9 +2493,34 @@ esp_err_t config_http_server_start(config_http_reload_fn_t reload_fn,
     static const httpd_uri_t api_put_wifi_uri = { .uri = "/api/wifi", .method = HTTP_PUT, .handler = config_http_handle_api_put_wifi };
     static const httpd_uri_t api_get_defaults_uri = { .uri = "/api/defaults", .method = HTTP_GET, .handler = config_http_handle_api_get_defaults };
     static const httpd_uri_t api_put_defaults_uri = { .uri = "/api/defaults", .method = HTTP_PUT, .handler = config_http_handle_api_put_defaults };
+    static const httpd_uri_t api_get_recording_uri = { .uri = "/api/recording", .method = HTTP_GET, .handler = config_http_handle_api_get_recording };
+    static const httpd_uri_t api_put_recording_uri = { .uri = "/api/recording", .method = HTTP_PUT, .handler = config_http_handle_api_put_recording };
+    static const httpd_uri_t recordings_page_uri = { .uri = "/recordings", .method = HTTP_GET, .handler = config_http_handle_recordings_page };
+    static const httpd_uri_t api_get_recordings_uri = { .uri = "/api/recordings", .method = HTTP_GET, .handler = config_http_handle_api_get_recordings };
+    static const httpd_uri_t api_download_recording_uri = { .uri = "/api/recordings/download", .method = HTTP_GET, .handler = config_http_handle_api_download_recording };
+    static const httpd_uri_t api_delete_recording_uri = { .uri = "/api/recordings/delete", .method = HTTP_GET, .handler = config_http_handle_api_delete_recording };
     static const httpd_uri_t api_put_active_mode_uri = { .uri = "/api/active-mode", .method = HTTP_PUT, .handler = config_http_handle_api_put_active_mode };
     static const httpd_uri_t api_get_boot_mode_uri = { .uri = "/api/boot-mode", .method = HTTP_GET, .handler = config_http_handle_api_get_boot_mode };
     static const httpd_uri_t api_get_global_bindings_uri = { .uri = "/api/global-bindings", .method = HTTP_GET, .handler = config_http_handle_api_get_global_bindings };
+    static const httpd_uri_t api_get_logs_uri = { .uri = "/api/logs", .method = HTTP_GET, .handler = config_http_handle_api_get_logs };
+
+    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_http_server, &options_config_uri),       TAG, "Register OPTIONS /config failed");
+    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_http_server, &options_config_can_uri),  TAG, "Register OPTIONS /config/canonical failed");
+    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_http_server, &options_config_val_uri),  TAG, "Register OPTIONS /config/validate failed");
+    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_http_server, &options_config_rst_uri),  TAG, "Register OPTIONS /config/reset failed");
+    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_http_server, &options_modes_uri),       TAG, "Register OPTIONS /api/modes failed");
+    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_http_server, &options_mode_uri),        TAG, "Register OPTIONS /api/mode failed");
+    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_http_server, &options_wifi_uri),        TAG, "Register OPTIONS /api/wifi failed");
+    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_http_server, &options_defaults_uri),    TAG, "Register OPTIONS /api/defaults failed");
+    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_http_server, &options_recording_uri),   TAG, "Register OPTIONS /api/recording failed");
+    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_http_server, &options_recordings_uri),  TAG, "Register OPTIONS /api/recordings failed");
+    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_http_server, &options_rec_dl_uri),      TAG, "Register OPTIONS /api/recordings/download failed");
+    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_http_server, &options_rec_del_uri),     TAG, "Register OPTIONS /api/recordings/delete failed");
+    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_http_server, &options_active_mode_uri), TAG, "Register OPTIONS /api/active-mode failed");
+    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_http_server, &options_boot_mode_uri),   TAG, "Register OPTIONS /api/boot-mode failed");
+    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_http_server, &options_global_bind_uri), TAG, "Register OPTIONS /api/global-bindings failed");
+    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_http_server, &options_ping_uri),        TAG, "Register OPTIONS /ping failed");
+    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_http_server, &options_logs_uri),        TAG, "Register OPTIONS /api/logs failed");
 
     ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_http_server, &root_uri), TAG, "Register / failed");
     ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_http_server, &ping_uri), TAG, "Register /ping failed");
@@ -1965,9 +2542,16 @@ esp_err_t config_http_server_start(config_http_reload_fn_t reload_fn,
     ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_http_server, &api_put_wifi_uri), TAG, "Register PUT /api/wifi failed");
     ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_http_server, &api_get_defaults_uri), TAG, "Register GET /api/defaults failed");
     ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_http_server, &api_put_defaults_uri), TAG, "Register PUT /api/defaults failed");
+    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_http_server, &api_get_recording_uri), TAG, "Register GET /api/recording failed");
+    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_http_server, &api_put_recording_uri), TAG, "Register PUT /api/recording failed");
+    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_http_server, &recordings_page_uri), TAG, "Register /recordings failed");
+    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_http_server, &api_get_recordings_uri), TAG, "Register GET /api/recordings failed");
+    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_http_server, &api_delete_recording_uri), TAG, "Register GET /api/recordings/delete failed");
+    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_http_server, &api_download_recording_uri), TAG, "Register GET /api/recordings/download failed");
     ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_http_server, &api_put_active_mode_uri), TAG, "Register PUT /api/active-mode failed");
     ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_http_server, &api_get_boot_mode_uri), TAG, "Register GET /api/boot-mode failed");
     ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_http_server, &api_get_global_bindings_uri), TAG, "Register GET /api/global-bindings failed");
+    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_http_server, &api_get_logs_uri), TAG, "Register GET /api/logs failed");
 
     return ESP_OK;
 }

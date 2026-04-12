@@ -11,7 +11,7 @@ typedef struct {
     bool (*send_hid_usage)(bool pressed, const mode_hid_usage_t *usage, void *user_data);
     void (*sleep_ms)(uint32_t duration_ms, void *user_data);
     bool (*get_mic_gate)(void *user_data);
-    void (*set_mic_gate)(bool enabled, void *user_data);
+    void (*set_mic_gate)(bool enabled, int8_t recording_override, void *user_data);
     void (*set_hint_text)(const char *text, void *user_data);
     void (*reset_active_outputs)(void *user_data);
     void (*refresh_ui)(void *user_data);

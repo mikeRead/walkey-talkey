@@ -18,8 +18,10 @@
 
 #include "action_engine.h"
 #include "audio_input.h"
+#include "audio_recorder.h"
 #include "boot_button.h"
 #include "config_http_server.h"
+#include "device_log.h"
 #include "input_router.h"
 #include "mode_config.h"
 #include "mode_controller.h"
@@ -1127,11 +1129,34 @@ static void app_sleep_ms(uint32_t duration_ms, void *user_data)
     vTaskDelay(pdMS_TO_TICKS(duration_ms));
 }
 
-static void app_set_mic_gate(bool enabled, void *user_data)
+static void app_set_mic_gate(bool enabled, int8_t recording_override, void *user_data)
 {
     (void)user_data;
     s_mic_gate_enabled = enabled;
-    usb_composite_set_ptt_audio_active(enabled);
+
+    if (!enabled) {
+        usb_composite_set_ptt_audio_active(false);
+        audio_recorder_stop();
+        return;
+    }
+
+    bool should_record;
+    if (recording_override >= 0) {
+        should_record = (recording_override == 1);
+    } else {
+        const mode_config_t *cfg = mode_config_get();
+        should_record = (cfg != NULL) && cfg->recording.enabled;
+    }
+
+    if (should_record && sd_card_is_present()) {
+        const char *mode_name = mode_controller_get_active_mode_name(&s_mode_controller);
+        esp_err_t rec_err = audio_recorder_start(mode_name);
+        if (rec_err != ESP_OK) {
+            ESP_LOGE(TAG, "audio_recorder_start failed: %s", esp_err_to_name(rec_err));
+        }
+    }
+
+    usb_composite_set_ptt_audio_active(true);
 }
 
 static bool app_get_mic_gate(void *user_data)
@@ -1151,6 +1176,7 @@ static void app_reset_active_outputs(void *user_data)
     (void)user_data;
 
     s_mic_gate_enabled = false;
+    audio_recorder_stop();
     app_set_boot_preview_state(APP_BOOT_PREVIEW_IDLE);
     app_set_sr_debug_text(NULL);
     app_sr_hook_stop();
@@ -1557,9 +1583,7 @@ void app_main(void)
 
     esp_err_t sd_err = sd_card_init();
     if (sd_err == ESP_OK) {
-        if (sd_card_mount() == ESP_OK) {
-            sd_card_config_populate();
-        }
+        sd_card_config_populate();
         sdmmc_card_t *card = sd_card_get_card();
         if (card != NULL) {
             uint64_t size_mb = ((uint64_t)card->csd.capacity) * card->csd.sector_size / (1024 * 1024);
@@ -1573,8 +1597,16 @@ void app_main(void)
                  esp_err_to_name(sd_err));
     }
 
+    device_log_init();
+    device_log("BOOT", "WalKEY-TalKEY starting");
+    device_log("BOOT", "SD card: %s", s_sd_diag_text);
+
+    audio_recorder_init();
+
     ESP_ERROR_CHECK(mode_config_init() ? ESP_OK : ESP_FAIL);
     s_mode_config = mode_config_get();
+    device_log("BOOT", "Config loaded (%zu modes)", s_mode_config->mode_count);
+
     mode_controller_init(&s_mode_controller, s_mode_config);
     input_router_init(&s_input_router, &s_mode_config->defaults.touch);
     s_action_context = (action_engine_context_t){
@@ -1607,14 +1639,18 @@ void app_main(void)
     usb_cdc_log_init();
     usb_composite_set_ptt_audio_active(false);
     ESP_ERROR_CHECK(boot_button_init(boot_button_event_cb, NULL));
+    device_log("BOOT", "USB composite + audio input ready");
 
     if (APP_ENABLE_CONFIG_PORTAL) {
         s_config_portal_start_pending = true;
         s_config_portal_start_deadline_ms = lv_tick_get() + APP_CONFIG_PORTAL_START_DELAY_MS;
         (void)app_request_ui_refresh();
+        device_log("BOOT", "Config portal startup scheduled");
     } else {
         ESP_LOGW(TAG, "Config portal startup disabled");
+        device_log("WARN", "Config portal startup disabled");
     }
 
     app_refresh_ui(NULL);
+    device_log("BOOT", "Boot complete");
 }

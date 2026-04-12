@@ -4,7 +4,7 @@
 
 Boot-time helper that populates the SD card with default files and reads config JSON from it.
 
-Called once during `app_main` while the SD card FAT filesystem is mounted. After `mode_config_init()` reads the config, the FAT is unmounted and the card is handed to USB MSC.
+Called once during `app_main` while the SD card FAT filesystem is mounted. The FAT filesystem remains mounted for both config access and audio recording. USB MSC shares the SD card concurrently.
 
 Files written on first boot (only if missing):
 
