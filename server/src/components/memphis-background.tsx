@@ -26,7 +26,8 @@ interface Shape {
     | "diamond"
     | "bigCircle"
     | "bigSquare"
-    | "bigStar";
+    | "bigStar"
+    | "swirl";
   x: number;
   y: number;
   size: number;
@@ -51,14 +52,14 @@ function generateShapes(): Shape[] {
   const randOpacity = () => rand(0.35, 1.0);
 
   // Large backdrop shapes first (render behind everything) - overlapping allowed
-  for (let i = 0; i < n(12, 20); i++) {
+  for (let i = 0; i < n(5, 10); i++) {
     const r = Math.random();
     const bgType: Shape["type"] = r < 0.15 ? "bigStar" : r < 0.55 ? "bigCircle" : "bigSquare";
     shapes.push({
       type: bgType,
       x: rand(-10, 95),
       y: rand(-10, 95),
-      size: rand(80, 320),
+      size: rand(80, 480),
       color: pick(COLORS),
       rotate: rand(0, 60),
       fillOpacity: rand(0.03, 0.10),
@@ -67,48 +68,48 @@ function generateShapes(): Shape[] {
     });
   }
 
-  for (let i = 0; i < n(4, 7); i++) {
+  for (let i = 0; i < n(2, 4); i++) {
     shapes.push({
       type: "squig",
       x: rand(2, 92),
       y: rand(5, 92),
-      size: rand(20, 90),
+      size: rand(20, 160),
       color: pick(COLORS),
       rotate: rand(-35, 35),
       opacity: randOpacity(),
     });
   }
 
-  for (let i = 0; i < n(3, 6); i++) {
+  for (let i = 0; i < n(1, 3); i++) {
     shapes.push({
       type: "zig",
       x: rand(5, 92),
       y: rand(5, 92),
-      size: rand(18, 80),
+      size: rand(18, 150),
       color: pick(COLORS),
       rotate: rand(-30, 35),
       opacity: randOpacity(),
     });
   }
 
-  for (let i = 0; i < n(3, 6); i++) {
+  for (let i = 0; i < n(1, 3); i++) {
     shapes.push({
       type: "bolt",
       x: rand(5, 92),
       y: rand(5, 88),
-      size: rand(8, 48),
+      size: rand(8, 80),
       color: pick(COLORS),
       rotate: rand(-20, 25),
       opacity: randOpacity(),
     });
   }
 
-  for (let i = 0; i < n(3, 6); i++) {
+  for (let i = 0; i < n(1, 3); i++) {
     shapes.push({
       type: "star",
       x: rand(5, 95),
       y: rand(5, 92),
-      size: rand(8, 52),
+      size: rand(8, 90),
       color: pick(COLORS),
       rotate: rand(-20, 45),
       stroke: Math.random() > 0.5,
@@ -116,12 +117,12 @@ function generateShapes(): Shape[] {
     });
   }
 
-  for (let i = 0; i < n(2, 5); i++) {
+  for (let i = 0; i < n(1, 3); i++) {
     shapes.push({
       type: "ring",
       x: rand(5, 92),
       y: rand(5, 92),
-      size: rand(12, 70),
+      size: rand(12, 120),
       color: pick(COLORS),
       opacity: randOpacity(),
     });
@@ -132,7 +133,7 @@ function generateShapes(): Shape[] {
       type: "arc",
       x: rand(5, 85),
       y: rand(5, 88),
-      size: rand(16, 72),
+      size: rand(16, 130),
       color: pick(COLORS),
       rotate: rand(-40, 40),
       opacity: randOpacity(),
@@ -144,31 +145,31 @@ function generateShapes(): Shape[] {
       type: "half",
       x: rand(5, 85),
       y: rand(10, 90),
-      size: rand(14, 60),
+      size: rand(14, 110),
       color: pick(COLORS),
       rotate: rand(-60, 60),
       opacity: randOpacity(),
     });
   }
 
-  for (let i = 0; i < n(2, 4); i++) {
+  for (let i = 0; i < n(1, 2); i++) {
     shapes.push({
       type: "hex",
       x: rand(2, 90),
       y: rand(5, 92),
-      size: rand(8, 48),
+      size: rand(8, 85),
       color: pick(COLORS),
       stroke: Math.random() > 0.4,
       opacity: randOpacity(),
     });
   }
 
-  for (let i = 0; i < n(2, 4); i++) {
+  for (let i = 0; i < n(1, 2); i++) {
     shapes.push({
       type: "diamond",
       x: rand(5, 88),
       y: rand(10, 88),
-      size: rand(6, 36),
+      size: rand(6, 64),
       color: pick(COLORS),
       rotate: rand(15, 65),
       stroke: Math.random() > 0.5,
@@ -181,7 +182,7 @@ function generateShapes(): Shape[] {
       type: "cross",
       x: rand(10, 88),
       y: rand(10, 92),
-      size: rand(6, 34),
+      size: rand(6, 60),
       color: pick(COLORS),
       rotate: rand(0, 45),
       opacity: randOpacity(),
@@ -193,14 +194,27 @@ function generateShapes(): Shape[] {
       type: "tri",
       x: rand(10, 88),
       y: rand(5, 88),
-      size: rand(8, 44),
+      size: rand(8, 80),
       color: pick(COLORS),
       rotate: rand(-30, 30),
       opacity: randOpacity(),
     });
   }
 
-  for (let i = 0; i < n(4, 8); i++) {
+  for (let i = 0; i < n(2, 4); i++) {
+    shapes.push({
+      type: "swirl",
+      x: rand(5, 90),
+      y: rand(5, 90),
+      size: rand(30, 180),
+      color: pick(COLORS),
+      rotate: rand(0, 360),
+      stroke: Math.random() > 0.4,
+      opacity: randOpacity(),
+    });
+  }
+
+  for (let i = 0; i < n(2, 4); i++) {
     shapes.push({
       type: "dot",
       x: rand(3, 97),
@@ -348,6 +362,20 @@ const TYPE_KEYFRAMES = `
   24%      { transform: scale(1);   opacity: 0.55; }
   36%      { transform: scale(1.4); opacity: 0.85; }
   48%      { transform: scale(1);   opacity: 0.55; }
+}
+
+/* ---- Swirl: continuous spiral spin with scale pulse ---- */
+@keyframes swirl-spin {
+  0%   { transform: rotate(0deg)   scale(1);    opacity: 0.7; }
+  25%  { transform: rotate(90deg)  scale(1.08); opacity: 1; }
+  50%  { transform: rotate(180deg) scale(0.92); opacity: 0.6; }
+  75%  { transform: rotate(270deg) scale(1.05); opacity: 0.9; }
+  100% { transform: rotate(360deg) scale(1);    opacity: 0.7; }
+}
+@keyframes swirl-draw {
+  0%   { stroke-dashoffset: 600; }
+  60%  { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: -600; }
 }
 
 /* ---- Big backdrop shapes: slow gentle float ---- */
@@ -659,6 +687,42 @@ function renderShape(s: Shape, i: number) {
         <div style={{ animation: `dot-heartbeat ${dur(2)} ease-in-out ${dl} infinite` }}>
           <svg width={s.size} height={s.size} viewBox={`0 0 ${s.size} ${s.size}`} fill="none">
             <circle cx={s.size / 2} cy={s.size / 2} r={s.size / 2} fill={s.color} />
+          </svg>
+        </div>
+      );
+      break;
+    }
+
+    case "swirl": {
+      const cx = s.size / 2;
+      const cy = s.size / 2;
+      const turns = 3;
+      const maxR = s.size / 2 - 2;
+      const minR = s.size * 0.06;
+      const steps = turns * 40;
+      let pathD = "";
+      for (let j = 0; j <= steps; j++) {
+        const t = j / steps;
+        const angle = t * turns * Math.PI * 2;
+        const r = minR + (maxR - minR) * t;
+        const px = cx + r * Math.cos(angle);
+        const py = cy + r * Math.sin(angle);
+        pathD += j === 0 ? `M ${px} ${py}` : ` L ${px} ${py}`;
+      }
+      const dir = rng() > 0.5 ? "normal" : "reverse";
+      content = (
+        <div style={{ animation: `swirl-spin ${dur(8)} linear ${dl} infinite`, animationDirection: dir }}>
+          <svg width={s.size} height={s.size} viewBox={`0 0 ${s.size} ${s.size}`} fill="none">
+            <path
+              d={pathD}
+              stroke={s.color}
+              strokeWidth={s.stroke ? 2 : 2.5}
+              strokeLinecap="round"
+              fill="none"
+              pathLength={600}
+              strokeDasharray="600"
+              style={{ animation: `swirl-draw ${dur(6)} linear ${dl} infinite` }}
+            />
           </svg>
         </div>
       );

@@ -6,28 +6,44 @@ ONNX Whisper models entirely on the client — no cloud API required.
 
 ## How It Works
 
-1. **Audio fetch** — the WAV file is downloaded from the ESP32 via
-   `GET /api/recordings/download?file=…` using an HTTP `Range: bytes=0-` request.
-2. **Resampling** — the browser's `AudioContext` decodes the WAV and resamples to
+1. **Auto-transcription** — new recordings are detected by polling
+   `GET /api/recordings` every 10 s. A file is considered ready once its size
+   is stable across two consecutive polls (avoids transcribing incomplete WAVs
+   that are still being written).
+2. **Chunked download** — the WAV file is downloaded from the ESP32 using
+   sequential **32 KB byte-range requests** (`Range: bytes=N-M`). Each chunk
+   retries up to 3 times on failure. This works around the ESP32 httpd randomly
+   truncating large responses.
+3. **Resampling** — the browser's `AudioContext` decodes the WAV and resamples to
    **16 kHz mono Float32**, which is what Whisper expects.
-3. **Caching** — the decoded samples are cached in memory so switching models
-   doesn't re-fetch from the device.
 4. **Silence gate** — an RMS energy check rejects audio below a threshold
    (`0.001`) before the model is loaded, saving time on truly silent clips.
-5. **Trailing trim** — the last 1 600 samples (~0.1 s) are zeroed to suppress
-   a known decoder hallucination trigger.
-6. **Inference** — a Web Worker loads the selected ONNX model and runs
+5. **Inference** — a Web Worker loads the selected ONNX model and runs
    `automatic-speech-recognition` with chunked decoding and timestamps.
-7. **Hallucination filter** — the output text is compared against a list of
+6. **Hallucination filter** — the output text is compared against a list of
    known hallucination phrases (see below). Matches are replaced with
    *(No speech detected)*.
+7. **Persistence** — completed transcripts are saved to `localStorage` keyed
+   by file name, so they survive page reloads. Auto-transcription skips files
+   that already have a saved transcript; clicking "Transcribe" always
+   re-transcribes.
 
 ```
-┌──────────┐   Range req    ┌──────────┐   decode/resample   ┌────────────┐
-│  ESP32   │ ─────────────► │ Browser  │ ──────────────────► │ Web Worker │
-│ SD Card  │   206 + data   │  fetch   │   Float32 @ 16kHz  │  Whisper   │
+┌──────────┐  32 KB Range   ┌──────────┐  decode/resample   ┌────────────┐
+│  ESP32   │  requests ×N   │ Browser  │ ──────────────────► │ Web Worker │
+│ SD Card  │ ◄────────────► │  fetch   │   Float32 @ 16kHz  │  Whisper   │
 └──────────┘                └──────────┘                     └────────────┘
 ```
+
+## Audio Playback
+
+The play button also uses the chunked download to get the full WAV file. On
+first click, the entire file is fetched via 32 KB range requests, assembled
+into a Blob URL, and played through an `<audio>` element. The blob is cached
+so subsequent plays are instant.
+
+A circular SVG progress ring fills counter-clockwise in green while playing,
+and a short time label (e.g. `9s`, `1M`) counts down the remaining duration.
 
 ## Available Models
 
@@ -53,37 +69,43 @@ receives silence or very quiet audio, it hallucinates common phrases like
 
 | Layer | Where | What |
 |---|---|---|
-| RMS gate | `whisper-panel.tsx` | Skips transcription if RMS < 0.001 |
-| Trailing mute | `whisper-worker.ts` | Zeros last 1 600 samples before inference |
+| RMS gate | `transcription-store.tsx` | Skips transcription if RMS < 0.001 |
 | Phrase filter | `whisper-worker.ts` | Rejects exact matches against known hallucinations |
 
 **If it still happens:** Lower the RMS threshold or add the new phrase to the
 `HALLUCINATION_PHRASES` set in `whisper-worker.ts`.
 
-### 2. Truncated audio (ESP32 chunked encoding)
+### 2. Truncated audio (ESP32 httpd limitation)
 
-**Problem:** The ESP32 HTTP server streams WAV files using chunked
-`Transfer-Encoding` for non-Range requests. Over Wi-Fi, chunks are sometimes
-lost, causing the browser to receive only a fraction of the file (e.g. 0.7 s
-out of 9 s).
+**Problem:** The ESP32 HTTP server randomly truncates large WAV file responses.
+A plain `fetch()` call may receive only a fraction of the file (e.g. 3 s out
+of 10 s), and the amount varies between requests with no pattern.
 
-**Why it matters:** The `<audio>` element works fine because browsers
-automatically use `Range` requests with proper buffering. But a plain
-`fetch()` call gets the unreliable chunked path.
-
-**Mitigation:** The Whisper fetch includes `Range: bytes=0-` in the request
-headers, which forces the ESP32 to load the full file into PSRAM and send it
-as a single response with `Content-Length`. This matches the reliable path the
-`<audio>` element uses.
+**Mitigation:** Both playback and transcription use `downloadFile()` which
+fetches the file in **32 KB byte-range chunks**, each with up to 3 retries.
+The ESP32 handles small range requests reliably, so assembling the full file
+from many small requests is consistently successful.
 
 **If audio is still truncated:**
 
-- Check the Logs page for the `Fetched … bytes (206)` log entry and compare
-  against expected file size.
-- Very large files (> 2 MB) may exceed PSRAM allocation. Consider shorter
-  recordings or increasing PSRAM budget in `sdkconfig`.
+- Check that the expected file size from `GET /api/recordings` matches what
+  was downloaded (logged to console).
+- Very large files (> 2 MB) may need more time. The download is sequential,
+  so ~32 requests per MB at ~100 ms round-trip each.
+- Reduce concurrent load on the ESP32 (e.g. close other browser tabs hitting
+  the device).
 
-### 3. Slow transcription
+### 3. Incomplete WAV files during recording
+
+**Problem:** Recordings appear in the file listing immediately when recording
+starts, while the WAV is still being written. Transcribing an incomplete file
+produces errors or partial results.
+
+**Mitigation:** Auto-transcription tracks each file's size across polls. A file
+is only queued for transcription once its size is unchanged between two
+consecutive 10 s polls, indicating the recording has finished writing.
+
+### 4. Slow transcription
 
 - **Tiny** takes ~5–15 s for a 10 s clip on a modern laptop.
 - **Small** can take 30–90 s for the same clip.
@@ -91,7 +113,7 @@ as a single response with `Content-Length`. This matches the reliable path the
   browser cache.
 - Transcription runs in a Web Worker and does not block the UI.
 
-### 4. Short or partial transcription
+### 5. Short or partial transcription
 
 **Problem:** Whisper Tiny may only capture part of the speech, especially for
 longer recordings or quiet voices.
@@ -104,8 +126,11 @@ the device).
 
 | File | Purpose |
 |---|---|
-| `server/src/components/whisper-panel.tsx` | UI, audio fetch, RMS gate, caching |
+| `server/src/lib/transcription-store.tsx` | TranscriptionProvider: auto-transcription, queue, polling, localStorage persistence |
+| `server/src/lib/api.ts` | `downloadFile()`: chunked Range-request downloader |
 | `server/src/lib/whisper-worker.ts` | Web Worker: model loading, inference, hallucination filter |
+| `server/src/components/play-button.tsx` | Play button with SVG progress ring and chunked audio download |
+| `server/src/components/recording-list.tsx` | Recording list UI with inline transcription status |
 | `main/config_http_server.c` | ESP32 download handler with Range support |
 
 ## Adding a New Hallucination Phrase
@@ -122,7 +147,7 @@ const HALLUCINATION_PHRASES = new Set([
 
 ## Adjusting the Silence Threshold
 
-In `server/src/components/whisper-panel.tsx`:
+In `server/src/lib/transcription-store.tsx`:
 
 ```typescript
 const RMS_SILENCE_THRESHOLD = 0.001; // lower = less aggressive filtering

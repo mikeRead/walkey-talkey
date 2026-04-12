@@ -4,9 +4,19 @@ export interface DocMeta {
   title: string;
   description: string;
   icon: string;
+  /** Resolve from project root instead of docs/ */
+  rootLevel?: boolean;
 }
 
 export const DOCS: DocMeta[] = [
+  {
+    slug: "readme",
+    file: "README.md",
+    title: "Project README",
+    description: "Overview, features, and quick-start for WalKEY-TalKEY",
+    icon: "Home",
+    rootLevel: true,
+  },
   {
     slug: "user-guide",
     file: "USER_GUIDE.md",
@@ -43,3 +53,20 @@ export const DOCS: DocMeta[] = [
     icon: "Sparkles",
   },
 ];
+
+/** Map a .md filename (case-insensitive) to its slug for inter-doc linking. */
+const FILE_TO_SLUG = new Map<string, string>(
+  DOCS.map((d) => [d.file.toLowerCase(), d.slug])
+);
+
+/**
+ * Resolve a markdown href (e.g. "USER_GUIDE.md", "docs/REST_API.md",
+ * "../README.md") to a /docs/<slug> path, or return null if unrecognised.
+ */
+export function resolveDocLink(href: string): string | null {
+  const basename = href.split("/").pop()?.split("#")[0]?.split("?")[0] ?? "";
+  const slug = FILE_TO_SLUG.get(basename.toLowerCase());
+  if (!slug) return null;
+  const hash = href.includes("#") ? href.slice(href.indexOf("#")) : "";
+  return `/docs/${slug}${hash}`;
+}

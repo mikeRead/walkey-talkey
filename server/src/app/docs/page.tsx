@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { DOCS } from "@/lib/docs";
-import { BookOpen, Globe, Cpu, Layers, Sparkles } from "lucide-react";
+import { BookOpen, Globe, Cpu, Layers, Sparkles, Home } from "lucide-react";
 
 const ICON_MAP: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
   BookOpen,
@@ -8,6 +8,7 @@ const ICON_MAP: Record<string, React.ComponentType<{ size?: number; className?: 
   Cpu,
   Layers,
   Sparkles,
+  Home,
 };
 
 export default function DocsHub() {

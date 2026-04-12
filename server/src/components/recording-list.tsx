@@ -1,79 +1,65 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useDevice } from "@/lib/device-store";
+import { useTranscription } from "@/lib/transcription-store";
 import { api } from "@/lib/api";
-import type { RecordingFile, RecordingSettings } from "@/types/config";
-import { useLogs } from "@/lib/log-store";
 import { formatBytes } from "@/lib/utils";
+import { PlayButton } from "./play-button";
 import {
   Mic,
   MicOff,
-  Play,
   Download,
   Trash2,
   Loader2,
   FileAudio,
   Sparkles,
+  Copy,
+  Check,
 } from "lucide-react";
 
-interface RecordingListProps {
-  onTranscribe: (fileUrl: string, fileName: string) => void;
-}
-
-export function RecordingList({ onTranscribe }: RecordingListProps) {
+export function RecordingList() {
   const { deviceUrl, connected } = useDevice();
-  const { addWebLog } = useLogs();
-  const [recordings, setRecordings] = useState<RecordingFile[]>([]);
-  const [settings, setSettings] = useState<RecordingSettings | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [playingUrl, setPlayingUrl] = useState<string | null>(null);
+  const {
+    recordings,
+    recordingSettings,
+    fetchRecordings,
+    getTranscription,
+    transcribe,
+    deleteRecording,
+    setRecordingEnabled,
+  } = useTranscription();
+  const [refreshing, setRefreshing] = useState(false);
+  const [copiedPath, setCopiedPath] = useState<string | null>(null);
 
-  const fetchData = async () => {
-    if (!connected) return;
-    setLoading(true);
-    try {
-      const [recs, sett] = await Promise.all([
-        api.getRecordings(deviceUrl),
-        api.getRecording(deviceUrl),
-      ]);
-      setRecordings(recs);
-      setSettings(sett);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchRecordings();
+    setRefreshing(false);
   };
 
-  useEffect(() => {
-    fetchData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deviceUrl, connected]);
-
-  const toggleRecording = async () => {
-    if (!settings) return;
+  const handleToggleRecording = async () => {
+    if (!recordingSettings) return;
     try {
-      const next = { enabled: !settings.enabled };
-      await api.setRecording(deviceUrl, next);
-      setSettings({ ...settings, ...next });
-      addWebLog("CONFIG", `Recording ${next.enabled ? "enabled" : "disabled"}`);
+      await setRecordingEnabled(!recordingSettings.enabled);
     } catch (e) {
       console.error(e);
-      addWebLog("ERROR", `Recording toggle failed: ${e}`);
     }
   };
 
   const handleDelete = async (file: string) => {
     if (!confirm(`Delete ${file}?`)) return;
     try {
-      await api.deleteRecording(deviceUrl, file);
-      setRecordings(recordings.filter((r) => r.path !== file));
-      addWebLog("ACTION", `Recording deleted: ${file}`);
+      await deleteRecording(file);
     } catch (e) {
       console.error(e);
-      addWebLog("ERROR", `Recording delete failed: ${e}`);
     }
+  };
+
+  const handleCopy = (path: string, text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedPath(path);
+    setTimeout(() => setCopiedPath(null), 2000);
   };
 
   if (!connected) {
@@ -93,36 +79,32 @@ export function RecordingList({ onTranscribe }: RecordingListProps) {
       {/* Recording Toggle */}
       <div className="card flex items-center gap-4">
         <button
-          className={`btn ${settings?.enabled ? "btn-accent" : "btn-ghost"}`}
-          onClick={toggleRecording}
+          className={`btn ${recordingSettings?.enabled ? "btn-accent" : "btn-ghost"}`}
+          onClick={handleToggleRecording}
         >
-          {settings?.enabled ? (
+          {recordingSettings?.enabled ? (
             <Mic size={18} className="mr-2" />
           ) : (
             <MicOff size={18} className="mr-2" />
           )}
-          {settings?.enabled ? "Recording Enabled" : "Recording Disabled"}
+          {recordingSettings?.enabled ? "Recording Enabled" : "Recording Disabled"}
         </button>
         <p className="text-sm text-text-muted">
-          {settings?.enabled
+          {recordingSettings?.enabled
             ? "Mic activations write WAV files to SD card"
             : "Enable to save recordings to SD card"}
         </p>
         <button
           className="btn btn-sm btn-ghost ml-auto"
-          onClick={fetchData}
-          disabled={loading}
+          onClick={handleRefresh}
+          disabled={refreshing}
         >
-          {loading ? <Loader2 size={14} className="animate-spin" /> : "Refresh"}
+          {refreshing ? <Loader2 size={14} className="animate-spin" /> : "Refresh"}
         </button>
       </div>
 
       {/* Recording List */}
-      {loading ? (
-        <div className="flex items-center justify-center py-8">
-          <Loader2 className="animate-spin text-primary" size={24} />
-        </div>
-      ) : recordings.length === 0 ? (
+      {recordings.length === 0 ? (
         <div className="card py-8 text-center text-text-muted">
           No recordings found on SD card.
         </div>
@@ -130,64 +112,60 @@ export function RecordingList({ onTranscribe }: RecordingListProps) {
         <div className="space-y-2">
           {recordings.map((rec) => {
             const downloadUrl = api.recordingDownloadUrl(deviceUrl, rec.path);
-            const isPlaying = playingUrl === downloadUrl;
+            const ts = getTranscription(rec.path);
 
             return (
               <div
                 key={rec.path}
-                className="card flex flex-col gap-3 sm:flex-row sm:items-center"
+                className="card flex flex-col gap-3"
               >
-                <div className="flex-1 min-w-0">
-                  <div className="truncate font-bold text-sm">{rec.path}</div>
-                  <div className="text-xs text-text-muted">
-                    {formatBytes(rec.size)}
+                {/* Top row: file info + actions */}
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <PlayButton src={downloadUrl} expectedSize={rec.size} />
+
+                  <div className="flex-1 min-w-0">
+                    <div className="truncate font-bold text-sm">{rec.path}</div>
+                    <div className="text-xs text-text-muted">
+                      {formatBytes(rec.size)}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <a
+                      href={downloadUrl}
+                      className="btn btn-sm btn-ghost"
+                      download
+                      title="Download"
+                    >
+                      <Download size={14} />
+                    </a>
+                    <button
+                      className="btn btn-sm btn-primary"
+                      onClick={() => transcribe(rec.path)}
+                      title="Transcribe with Whisper"
+                    >
+                      <Sparkles size={14} className="mr-1" />
+                      <span className="hidden sm:inline">Transcribe</span>
+                    </button>
+                    <button
+                      className="btn btn-sm btn-danger"
+                      onClick={() => handleDelete(rec.path)}
+                      title="Delete"
+                    >
+                      <Trash2 size={14} />
+                    </button>
                   </div>
                 </div>
 
-                {isPlaying && (
-                  <audio
-                    src={downloadUrl}
-                    controls
-                    autoPlay
-                    className="w-full sm:w-64"
-                    onEnded={() => setPlayingUrl(null)}
+                {/* Inline transcription status */}
+                {ts && (
+                  <TranscriptionRow
+                    state={ts}
+                    path={rec.path}
+                    copiedPath={copiedPath}
+                    onCopy={handleCopy}
                   />
                 )}
-
-                <div className="flex gap-2">
-                  <button
-                    className="btn btn-sm btn-ghost"
-                    onClick={() =>
-                      setPlayingUrl(isPlaying ? null : downloadUrl)
-                    }
-                    title="Play"
-                  >
-                    <Play size={14} />
-                  </button>
-                  <a
-                    href={downloadUrl}
-                    className="btn btn-sm btn-ghost"
-                    download
-                    title="Download"
-                  >
-                    <Download size={14} />
-                  </a>
-                  <button
-                    className="btn btn-sm btn-primary"
-                    onClick={() => onTranscribe(downloadUrl, rec.path)}
-                    title="Transcribe with Whisper"
-                  >
-                    <Sparkles size={14} className="mr-1" />
-                    <span className="hidden sm:inline">Transcribe</span>
-                  </button>
-                  <button
-                    className="btn btn-sm btn-danger"
-                    onClick={() => handleDelete(rec.path)}
-                    title="Delete"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
               </div>
             );
           })}
@@ -195,4 +173,86 @@ export function RecordingList({ onTranscribe }: RecordingListProps) {
       )}
     </div>
   );
+}
+
+function TranscriptionRow({
+  state,
+  path,
+  copiedPath,
+  onCopy,
+}: {
+  state: NonNullable<ReturnType<ReturnType<typeof useTranscription>["getTranscription"]>>;
+  path: string;
+  copiedPath: string | null;
+  onCopy: (path: string, text: string) => void;
+}) {
+  const { status, progress, progressMsg, transcript, error } = state;
+
+  if (status === "queued") {
+    return (
+      <div className="text-xs text-text-muted">
+        Queued for transcription...
+      </div>
+    );
+  }
+
+  if (status === "fetching" || status === "loading") {
+    return (
+      <div>
+        <div className="mb-1 text-xs text-text-muted">
+          <Loader2 size={10} className="mr-1 inline animate-spin" />
+          {progressMsg}
+        </div>
+        {status === "loading" && (
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-raised">
+            <div
+              className="h-full rounded-full bg-accent transition-all duration-300"
+              style={{ width: `${Math.min(progress, 100)}%` }}
+            />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (status === "transcribing") {
+    return (
+      <div>
+        <div className="mb-1 text-xs text-text-muted">
+          <Loader2 size={10} className="mr-1 inline animate-spin" />
+          Transcribing...
+        </div>
+        {transcript && (
+          <p className="text-xs text-text-muted italic">{transcript}</p>
+        )}
+      </div>
+    );
+  }
+
+  if (status === "error") {
+    return (
+      <div className="text-xs text-danger">{error}</div>
+    );
+  }
+
+  if (status === "complete" && transcript) {
+    return (
+      <div className="relative rounded-lg bg-surface-raised p-2.5">
+        <p className="pr-8 text-xs text-text whitespace-pre-wrap">{transcript}</p>
+        <button
+          className="absolute right-1.5 top-1.5 rounded p-1 text-text-muted hover:text-text transition-colors cursor-pointer"
+          onClick={() => onCopy(path, transcript)}
+          title="Copy transcript"
+        >
+          {copiedPath === path ? (
+            <Check size={12} className="text-success" />
+          ) : (
+            <Copy size={12} />
+          )}
+        </button>
+      </div>
+    );
+  }
+
+  return null;
 }

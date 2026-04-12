@@ -59,6 +59,70 @@ function post<T = unknown>(deviceUrl: string, path: string, body: unknown): Prom
   });
 }
 
+const DL_CHUNK = 32768; // 32 KB per Range request
+const DL_RETRIES = 3;
+
+/**
+ * Reliably download a file from the ESP32 using byte-range requests.
+ * The ESP32 httpd randomly truncates large responses, so we fetch
+ * in small chunks and assemble them client-side.
+ */
+export async function downloadFile(
+  url: string,
+  expectedSize: number,
+): Promise<ArrayBuffer> {
+  let totalSize = expectedSize;
+
+  if (totalSize <= 0) {
+    try {
+      const head = await fetch(url, { method: "HEAD" });
+      const cl = head.headers.get("content-length");
+      if (cl) totalSize = parseInt(cl, 10);
+    } catch {
+      // ignore
+    }
+  }
+
+  if (totalSize <= 0) {
+    const res = await fetch(url);
+    return res.arrayBuffer();
+  }
+
+  const chunks: Uint8Array[] = [];
+  let offset = 0;
+
+  while (offset < totalSize) {
+    const end = Math.min(offset + DL_CHUNK - 1, totalSize - 1);
+    let chunk: ArrayBuffer | null = null;
+
+    for (let attempt = 0; attempt < DL_RETRIES; attempt++) {
+      try {
+        const res = await fetch(url, {
+          headers: { Range: `bytes=${offset}-${end}` },
+        });
+        chunk = await res.arrayBuffer();
+        if (chunk.byteLength > 0) break;
+      } catch {
+        // network hiccup, retry
+      }
+      if (attempt < DL_RETRIES - 1)
+        await new Promise((r) => setTimeout(r, 200));
+    }
+
+    if (!chunk || chunk.byteLength === 0) break;
+    chunks.push(new Uint8Array(chunk));
+    offset += chunk.byteLength;
+  }
+
+  const result = new Uint8Array(offset);
+  let pos = 0;
+  for (const c of chunks) {
+    result.set(c, pos);
+    pos += c.byteLength;
+  }
+  return result.buffer;
+}
+
 export const api = {
   ping: (url: string) => apiFetch(url, "/ping"),
 

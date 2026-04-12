@@ -45,7 +45,7 @@ function formatRuntime(ms: number) {
 
 export default function LogsPage() {
   const { connected } = useDevice();
-  const { allLogs, fetchDeviceLogs } = useLogs();
+  const { logs, fetchDeviceLogs } = useLogs();
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -66,7 +66,7 @@ export default function LogsPage() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [allLogs.length]);
+  }, [logs.length]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -113,7 +113,7 @@ export default function LogsPage() {
         </button>
 
         <span className="ml-auto text-xs text-text-muted">
-          {allLogs.length} log{allLogs.length !== 1 ? "s" : ""}
+          {logs.length} log{logs.length !== 1 ? "s" : ""}
         </span>
       </div>
 
@@ -125,7 +125,7 @@ export default function LogsPage() {
             Connect to your device to view logs.
           </p>
         </div>
-      ) : allLogs.length === 0 ? (
+      ) : logs.length === 0 ? (
         <div className="flex flex-col items-center rounded-xl border-2 border-dashed border-border bg-surface/80 px-6 py-16 text-center">
           <ScrollText size={48} className="mb-4 text-text-muted" />
           <h2 className="mb-2 text-xl font-extrabold">No Logs Yet</h2>
@@ -153,7 +153,7 @@ export default function LogsPage() {
 
           {/* Log entries */}
           <div className="max-h-[70vh] overflow-y-auto p-4 font-mono text-xs leading-relaxed">
-            {allLogs.map((log, i) => (
+            {logs.map((log, i) => (
               <div key={i} className="flex items-start gap-3 py-1">
                 <span className="w-20 shrink-0 text-right text-white/30">
                   [{formatRuntime(log.runtime)}]

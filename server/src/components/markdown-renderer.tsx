@@ -4,6 +4,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import type { Components } from "react-markdown";
+import { resolveDocLink } from "@/lib/docs";
 
 interface MarkdownRendererProps {
   content: string;
@@ -99,6 +100,14 @@ const walkeyTheme: Record<string, React.CSSProperties> = {
 };
 
 const components: Partial<Components> = {
+  a({ href, children, ...rest }) {
+    const resolved = href && /\.md(\b|#|$)/.test(href) ? resolveDocLink(href) : null;
+    return (
+      <a href={resolved ?? href} {...rest}>
+        {children}
+      </a>
+    );
+  },
   code({ className, children, ...rest }) {
     const match = /language-(\w+)/.exec(className || "");
     const codeString = String(children).replace(/\n$/, "");

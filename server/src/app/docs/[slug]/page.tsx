@@ -20,8 +20,10 @@ export default async function DocPage({ params }: Props) {
   const doc = DOCS.find((d) => d.slug === slug);
   if (!doc) notFound();
 
-  const docsDir = path.join(process.cwd(), "..", "docs");
-  const filePath = path.join(docsDir, doc.file);
+  const baseDir = doc.rootLevel
+    ? path.join(process.cwd(), "..")
+    : path.join(process.cwd(), "..", "docs");
+  const filePath = path.join(baseDir, doc.file);
 
   let content: string;
   try {

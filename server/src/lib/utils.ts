@@ -11,3 +11,8 @@ export function formatBytes(bytes: number): string {
 export function triggerLabel(trigger: string): string {
   return trigger.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
+
+export function formatShortTime(seconds: number): string {
+  if (seconds >= 60) return `${Math.ceil(seconds / 60)}M`;
+  return `${Math.max(1, Math.ceil(seconds))}s`;
+}

@@ -4,19 +4,19 @@ import Image from "next/image";
 import Link from "next/link";
 import { useDevice } from "@/lib/device-store";
 import { api } from "@/lib/api";
-import { useState, useEffect, useRef } from "react";
-import type { ModeSummary, WifiConfig, RecordingSettings } from "@/types/config";
+import { useState, useEffect, useRef, useMemo } from "react";
+import type { ModeSummary, WifiConfig } from "@/types/config";
 import { useLogs } from "@/lib/log-store";
+import { useTranscription } from "@/lib/transcription-store";
+import { formatBytes } from "@/lib/utils";
 import type { LogEntry } from "@/types/config";
 import {
-  FileAudio,
-  BookOpen,
   Wifi,
   WifiOff,
   Zap,
   Mic,
   MicOff,
-  Settings,
+  Loader2,
   ChevronRight,
   Gamepad2,
   X,
@@ -26,7 +26,6 @@ interface DeviceInfo {
   modes: ModeSummary[];
   activeMode: string | null;
   wifi: WifiConfig | null;
-  recording: RecordingSettings | null;
 }
 
 export default function HomePage() {
@@ -35,7 +34,6 @@ export default function HomePage() {
     modes: [],
     activeMode: null,
     wifi: null,
-    recording: null,
   });
 
   useEffect(() => {
@@ -44,13 +42,11 @@ export default function HomePage() {
       api.getModes(deviceUrl),
       api.getActiveMode(deviceUrl),
       api.getWifi(deviceUrl),
-      api.getRecording(deviceUrl),
-    ]).then(([modesR, activeR, wifiR, recR]) => {
+    ]).then(([modesR, activeR, wifiR]) => {
       setInfo({
         modes: modesR.status === "fulfilled" ? modesR.value : [],
         activeMode: activeR.status === "fulfilled" ? activeR.value : null,
         wifi: wifiR.status === "fulfilled" ? wifiR.value : null,
-        recording: recR.status === "fulfilled" ? recR.value : null,
       });
     });
   }, [deviceUrl, connected]);
@@ -152,39 +148,7 @@ export default function HomePage() {
           </div>
 
           {/* Recording */}
-          <div className="card space-y-3 hover:border-accent">
-            <div className="flex items-center gap-2">
-              {info.recording?.enabled ? (
-                <Mic size={18} className="text-accent" />
-              ) : (
-                <MicOff size={18} className="text-text-muted" />
-              )}
-              <h2 className="section-title text-accent">Recording</h2>
-            </div>
-            <div className="flex items-center gap-3">
-              <div
-                className={`h-3 w-3 rounded-full ${
-                  info.recording?.enabled
-                    ? "bg-accent animate-pulse"
-                    : "bg-text-muted/30"
-                }`}
-              />
-              <span className="text-sm font-bold">
-                {info.recording?.enabled ? "Active" : "Disabled"}
-              </span>
-            </div>
-            {info.recording?.format && (
-              <p className="text-xs text-text-muted">
-                Format: {info.recording.format}
-              </p>
-            )}
-            <Link
-              href="/recordings"
-              className="btn btn-sm btn-ghost w-full justify-between"
-            >
-              View Recordings <ChevronRight size={14} />
-            </Link>
-          </div>
+          <RecordingCard />
 
           {/* Wi-Fi */}
           <div className="card space-y-3 hover:border-highlight">
@@ -220,6 +184,77 @@ export default function HomePage() {
           </p>
         </div>
       )}
+    </div>
+  );
+}
+
+function RecordingCard() {
+  const { recordings, recordingSettings, getTranscription, pendingCount } = useTranscription();
+  const latest = recordings.length > 0 ? recordings[recordings.length - 1] : null;
+  const latestState = latest ? getTranscription(latest.path) : undefined;
+
+  return (
+    <div className="card space-y-3 hover:border-accent">
+      <div className="flex items-center gap-2">
+        {recordingSettings?.enabled ? (
+          <Mic size={18} className="text-accent" />
+        ) : (
+          <MicOff size={18} className="text-text-muted" />
+        )}
+        <h2 className="section-title text-accent">Recording</h2>
+        {pendingCount > 0 && (
+          <span className="ml-auto flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold text-white animate-pulse">
+            {pendingCount}
+          </span>
+        )}
+      </div>
+      <div className="flex items-center gap-3">
+        <div
+          className={`h-3 w-3 rounded-full ${
+            recordingSettings?.enabled
+              ? "bg-accent animate-pulse"
+              : "bg-text-muted/30"
+          }`}
+        />
+        <span className="text-sm font-bold">
+          {recordingSettings?.enabled ? "Active" : "Disabled"}
+        </span>
+      </div>
+      {recordingSettings?.format && (
+        <p className="text-xs text-text-muted">
+          Format: {recordingSettings.format}
+        </p>
+      )}
+
+      {latest && (
+        <div className="space-y-1.5 rounded-lg bg-surface-raised p-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <span className="truncate text-xs font-bold text-text">{latest.path}</span>
+            <span className="shrink-0 text-[10px] text-text-muted">{formatBytes(latest.size)}</span>
+          </div>
+          {latestState?.status === "complete" && latestState.transcript && (
+            <p className="line-clamp-2 text-xs text-text-muted">
+              {latestState.transcript}
+            </p>
+          )}
+          {latestState && latestState.status !== "complete" && latestState.status !== "error" && (
+            <div className="flex items-center gap-1.5 text-xs text-accent">
+              <Loader2 size={10} className="animate-spin" />
+              <span>{latestState.progressMsg || latestState.status}</span>
+            </div>
+          )}
+          {latestState?.status === "error" && (
+            <p className="text-xs text-danger">{latestState.error}</p>
+          )}
+        </div>
+      )}
+
+      <Link
+        href="/recordings"
+        className="btn btn-sm btn-ghost w-full justify-between"
+      >
+        View Recordings <ChevronRight size={14} />
+      </Link>
     </div>
   );
 }
@@ -379,7 +414,7 @@ function ConsoleContent({ lines }: { lines: { color: string; text: string }[] })
 function DeviceConsole() {
   const [expanded, setExpanded] = useState(false);
   const { connected } = useDevice();
-  const { deviceLogs, webLogs, fetchDeviceLogs } = useLogs();
+  const { logs, fetchDeviceLogs } = useLogs();
 
   useEffect(() => {
     if (!connected) return;
@@ -388,12 +423,14 @@ function DeviceConsole() {
     return () => clearInterval(id);
   }, [connected, fetchDeviceLogs]);
 
-  const hasLogs = connected && (deviceLogs.length > 0 || webLogs.length > 0);
-  const lines = hasLogs
-    ? [...deviceLogs, ...webLogs]
-        .sort((a, b) => a.receivedAt - b.receivedAt)
-        .map(logEntryToConsoleLine)
-    : FALLBACK_CONSOLE_LINES;
+  const hasLogs = connected && logs.length > 0;
+  const lines = useMemo(
+    () =>
+      hasLogs
+        ? logs.map((e) => logEntryToConsoleLine(e))
+        : FALLBACK_CONSOLE_LINES,
+    [hasLogs, logs],
+  );
 
   const scrollRef = useAutoScroll(lines);
   const modalScrollRef = useAutoScroll(lines);

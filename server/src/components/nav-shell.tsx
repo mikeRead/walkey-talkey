@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { DeviceProvider } from "@/lib/device-store";
 import { LogProvider } from "@/lib/log-store";
+import { TranscriptionProvider, useTranscription } from "@/lib/transcription-store";
 import { DeviceConnector } from "./device-connector";
 import { DeviceStatus } from "./device-status";
 import { Home, Layers, FileAudio, BookOpen, ScrollText } from "lucide-react";
@@ -26,38 +27,56 @@ const NAV_ITEMS = [
   { href: "/docs", label: "Docs", icon: BookOpen },
 ];
 
-export function NavShell({ children }: { children: ReactNode }) {
+function NavBar() {
   const pathname = usePathname();
+  const { pendingCount } = useTranscription();
+
+  return (
+    <nav className="hidden items-center gap-1 md:flex">
+      {NAV_ITEMS.map((item) => {
+        const active =
+          item.href === "/"
+            ? pathname === "/"
+            : pathname.startsWith(item.href);
+        const showBadge =
+          item.href === "/recordings" &&
+          pendingCount > 0 &&
+          !pathname.startsWith("/recordings");
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            className={cn(
+              "relative flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-bold uppercase tracking-wider transition-colors",
+              active
+                ? "bg-primary/10 text-primary"
+                : "text-text-muted hover:text-text",
+            )}
+          >
+            <item.icon size={16} />
+            {item.label}
+            {showBadge && (
+              <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold text-white animate-pulse">
+                {pendingCount}
+              </span>
+            )}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
+export function NavShell({ children }: { children: ReactNode }) {
   return (
     <DeviceProvider>
     <LogProvider>
+    <TranscriptionProvider>
       {/* Top Header */}
       <header className="sticky top-0 z-40 border-b-2 border-border bg-surface/95 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-3">
           {/* Desktop Nav */}
-          <nav className="hidden items-center gap-1 md:flex">
-            {NAV_ITEMS.map((item) => {
-              const active =
-                item.href === "/"
-                  ? pathname === "/"
-                  : pathname.startsWith(item.href);
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={cn(
-                    "flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-bold uppercase tracking-wider transition-colors",
-                    active
-                      ? "bg-primary/10 text-primary"
-                      : "text-text-muted hover:text-text",
-                  )}
-                >
-                  <item.icon size={16} />
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
+          <NavBar />
 
           {/* Right side */}
           <div className="ml-auto flex items-center gap-3">
@@ -80,6 +99,7 @@ export function NavShell({ children }: { children: ReactNode }) {
       {/* Page Content */}
       <main className="mx-auto max-w-7xl px-4 py-6">{children}</main>
 
+    </TranscriptionProvider>
     </LogProvider>
     </DeviceProvider>
   );
