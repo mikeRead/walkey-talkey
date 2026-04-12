@@ -25,7 +25,8 @@ interface Shape {
     | "hex"
     | "diamond"
     | "bigCircle"
-    | "bigSquare";
+    | "bigSquare"
+    | "bigStar";
   x: number;
   y: number;
   size: number;
@@ -51,15 +52,17 @@ function generateShapes(): Shape[] {
 
   // Large backdrop shapes first (render behind everything) - overlapping allowed
   for (let i = 0; i < n(12, 20); i++) {
+    const r = Math.random();
+    const bgType: Shape["type"] = r < 0.15 ? "bigStar" : r < 0.55 ? "bigCircle" : "bigSquare";
     shapes.push({
-      type: Math.random() > 0.5 ? "bigCircle" : "bigSquare",
+      type: bgType,
       x: rand(-10, 95),
       y: rand(-10, 95),
       size: rand(80, 320),
       color: pick(COLORS),
       rotate: rand(0, 60),
       fillOpacity: rand(0.03, 0.10),
-      stroke: Math.random() > 0.5,
+      stroke: bgType === "bigStar" ? true : Math.random() > 0.5,
       opacity: randOpacity(),
     });
   }
@@ -411,6 +414,26 @@ function renderShape(s: Shape, i: number) {
             ) : (
               <rect width={s.size} height={s.size} rx={rx} fill={s.color} fillOpacity={s.fillOpacity ?? 0.06} />
             )}
+          </svg>
+        </div>
+      );
+      break;
+    }
+
+    case "bigStar": {
+      const r = s.size / 2;
+      const cx = r, cy = r;
+      const pts = 5;
+      const sw = Math.max(3, s.size * 0.025);
+      const points = Array.from({ length: pts * 2 }, (_, j) => {
+        const angle = (Math.PI * j) / pts - Math.PI / 2;
+        const rad = j % 2 === 0 ? r : r * 0.38;
+        return `${cx + rad * Math.cos(angle)},${cy + rad * Math.sin(angle)}`;
+      }).join(" ");
+      content = (
+        <div style={{ animation: `backdrop-float ${dur(24)} ease-in-out ${dl} infinite` }}>
+          <svg width={s.size} height={s.size} viewBox={`0 0 ${s.size} ${s.size}`}>
+            <polygon points={points} fill="none" stroke={s.color} strokeWidth={sw} opacity={s.fillOpacity ?? 0.06} strokeLinejoin="round" />
           </svg>
         </div>
       );

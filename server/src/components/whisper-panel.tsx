@@ -58,9 +58,14 @@ export function WhisperPanel({ audioUrl, fileName }: WhisperPanelProps) {
       return cachedAudioRef.current.samples;
     }
 
-    const response = await fetch(audioUrl, {
-      headers: { Range: "bytes=0-" },
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
+    let response: Response;
+    try {
+      response = await fetch(audioUrl, { signal: controller.signal });
+    } finally {
+      clearTimeout(timeout);
+    }
     const arrayBuffer = await response.arrayBuffer();
     addWebLog("WHISPER", `Fetched ${arrayBuffer.byteLength} bytes (${response.status}) from device`);
 

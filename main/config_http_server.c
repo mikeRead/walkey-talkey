@@ -2126,6 +2126,8 @@ static esp_err_t config_http_handle_api_download_recording(httpd_req_t *req)
     httpd_resp_set_hdr(req, "Accept-Ranges", "bytes");
     config_http_set_cors_headers(req);
 
+    #define RANGE_BUFFER_MAX (256 * 1024)
+
     char range_hdr[64] = {0};
     if (httpd_req_get_hdr_value_str(req, "Range", range_hdr, sizeof(range_hdr)) == ESP_OK) {
         long rs = 0, re = 0;
@@ -2138,42 +2140,54 @@ static esp_err_t config_http_handle_api_download_recording(httpd_req_t *req)
             }
             long content_length = range_end - range_start + 1;
 
-            char *buf = heap_caps_malloc((size_t)content_length, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-            if (buf == NULL) {
-                buf = malloc((size_t)content_length);
-            }
-            if (buf == NULL) {
+            if (content_length <= RANGE_BUFFER_MAX) {
+                char *buf = heap_caps_malloc((size_t)content_length, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+                if (buf == NULL) {
+                    buf = malloc((size_t)content_length);
+                }
+                if (buf == NULL) {
+                    fclose(f);
+                    return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Out of memory");
+                }
+
+                fseek(f, range_start, SEEK_SET);
+                size_t nread = fread(buf, 1, (size_t)content_length, f);
                 fclose(f);
-                return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Out of memory");
+
+                char cr_str[64];
+                snprintf(cr_str, sizeof(cr_str), "bytes %ld-%ld/%ld", range_start, range_end, file_size);
+                httpd_resp_set_hdr(req, "Content-Range", cr_str);
+                httpd_resp_set_status(req, "206 Partial Content");
+
+                esp_err_t err = httpd_resp_send(req, buf, (ssize_t)nread);
+                free(buf);
+                return err;
             }
-
-            fseek(f, range_start, SEEK_SET);
-            size_t nread = fread(buf, 1, (size_t)content_length, f);
-            fclose(f);
-
-            char cr_str[64];
-            snprintf(cr_str, sizeof(cr_str), "bytes %ld-%ld/%ld", range_start, range_end, file_size);
-            httpd_resp_set_hdr(req, "Content-Range", cr_str);
-            httpd_resp_set_status(req, "206 Partial Content");
-
-            esp_err_t err = httpd_resp_send(req, buf, (ssize_t)nread);
-            free(buf);
-            return err;
         }
     }
 
-    char buf[1024];
+    #define STREAM_CHUNK_SIZE 4096
+    char *sbuf = heap_caps_malloc(STREAM_CHUNK_SIZE, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (sbuf == NULL) {
+        sbuf = malloc(STREAM_CHUNK_SIZE);
+    }
+    if (sbuf == NULL) {
+        fclose(f);
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Out of memory");
+    }
+
     size_t nread;
-    while ((nread = fread(buf, 1, sizeof(buf), f)) > 0) {
-        if (httpd_resp_send_chunk(req, buf, nread) != ESP_OK) {
-            fclose(f);
-            httpd_resp_send_chunk(req, NULL, 0);
-            return ESP_FAIL;
+    esp_err_t ret = ESP_OK;
+    while ((nread = fread(sbuf, 1, STREAM_CHUNK_SIZE, f)) > 0) {
+        if (httpd_resp_send_chunk(req, sbuf, nread) != ESP_OK) {
+            ret = ESP_FAIL;
+            break;
         }
     }
     fclose(f);
+    free(sbuf);
     httpd_resp_send_chunk(req, NULL, 0);
-    return ESP_OK;
+    return ret;
 }
 
 /* ---------------------------------------------------------------------------
@@ -2395,6 +2409,8 @@ esp_err_t config_http_server_start(config_http_reload_fn_t reload_fn,
     httpd_config_t server_config = HTTPD_DEFAULT_CONFIG();
     server_config.max_uri_handlers = 54;
     server_config.stack_size = CONFIG_HTTP_SERVER_STACK_SIZE;
+    server_config.max_open_sockets = 7;
+    server_config.lru_purge_enable = true;
 
     ESP_RETURN_ON_ERROR(httpd_start(&s_http_server, &server_config), TAG, "HTTP server start failed");
     device_log("INFO", "HTTP server started on port 80");

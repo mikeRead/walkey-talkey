@@ -101,6 +101,7 @@ export interface LogEntry {
   message: string;
   runtime: number;
   source: "device" | "web";
+  receivedAt: number;
 }
 
 // Action type metadata for the editor

@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useDevice } from "@/lib/device-store";
 import { api } from "@/lib/api";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { ModeSummary, WifiConfig, RecordingSettings } from "@/types/config";
 import { useLogs } from "@/lib/log-store";
 import type { LogEntry } from "@/types/config";
@@ -330,12 +330,39 @@ const LOG_TYPE_COLORS: Record<string, string> = {
   ERROR: "text-red-400",
   CONFIG: "text-accent",
   ACTION: "text-secondary",
+  API: "text-cyan-400/60",
+  API_ERR: "text-red-400",
+  WHISPER: "text-purple-400",
 };
 
 function logEntryToConsoleLine(entry: LogEntry) {
   const secs = (entry.runtime / 1000).toFixed(3);
   const color = LOG_TYPE_COLORS[entry.type] ?? "text-white/30";
   return { color, text: `[${secs}] ${entry.type}: ${entry.message}` };
+}
+
+function useAutoScroll(dep: unknown) {
+  const ref = useRef<HTMLDivElement>(null);
+  const stickRef = useRef(true);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const onScroll = () => {
+      stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (el && stickRef.current) {
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [dep]);
+
+  return ref;
 }
 
 function ConsoleContent({ lines }: { lines: { color: string; text: string }[] }) {
@@ -352,7 +379,7 @@ function ConsoleContent({ lines }: { lines: { color: string; text: string }[] })
 function DeviceConsole() {
   const [expanded, setExpanded] = useState(false);
   const { connected } = useDevice();
-  const { deviceLogs, fetchDeviceLogs } = useLogs();
+  const { deviceLogs, webLogs, fetchDeviceLogs } = useLogs();
 
   useEffect(() => {
     if (!connected) return;
@@ -361,9 +388,15 @@ function DeviceConsole() {
     return () => clearInterval(id);
   }, [connected, fetchDeviceLogs]);
 
-  const lines = connected && deviceLogs.length > 0
-    ? deviceLogs.map(logEntryToConsoleLine)
+  const hasLogs = connected && (deviceLogs.length > 0 || webLogs.length > 0);
+  const lines = hasLogs
+    ? [...deviceLogs, ...webLogs]
+        .sort((a, b) => a.receivedAt - b.receivedAt)
+        .map(logEntryToConsoleLine)
     : FALLBACK_CONSOLE_LINES;
+
+  const scrollRef = useAutoScroll(lines);
+  const modalScrollRef = useAutoScroll(lines);
 
   return (
     <>
@@ -378,10 +411,10 @@ function DeviceConsole() {
           <div className="h-3 w-3 rounded-full bg-primary" />
           <span className="ml-2 font-mono text-xs text-white/50">
             walkey-talkey.local — console
-            {connected && deviceLogs.length > 0 && " (live)"}
+            {connected && hasLogs && " (live)"}
           </span>
         </button>
-        <div className="console-scroll flex-1 overflow-y-auto p-4 font-mono text-xs leading-relaxed">
+        <div ref={scrollRef} className="console-scroll flex-1 overflow-y-auto p-4 font-mono text-xs leading-relaxed">
           <ConsoleContent lines={lines} />
         </div>
       </div>
@@ -406,7 +439,7 @@ function DeviceConsole() {
               <div className="h-3 w-3 rounded-full bg-primary" />
               <span className="ml-2 font-mono text-sm text-white/50">
                 walkey-talkey.local — console
-                {connected && deviceLogs.length > 0 && " (live)"}
+                {connected && hasLogs && " (live)"}
               </span>
               <button
                 onClick={() => setExpanded(false)}
@@ -415,7 +448,7 @@ function DeviceConsole() {
                 <X size={18} />
               </button>
             </div>
-            <div className="console-scroll flex-1 overflow-y-auto p-6 font-mono text-sm leading-relaxed">
+            <div ref={modalScrollRef} className="console-scroll flex-1 overflow-y-auto p-6 font-mono text-sm leading-relaxed">
               <ConsoleContent lines={lines} />
             </div>
           </div>

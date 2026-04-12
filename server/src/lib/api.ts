@@ -9,17 +9,28 @@ import type {
   LogEntry,
 } from "@/types/config";
 
+type ApiLogCallback = (method: string, path: string, status: number, ok: boolean, ms: number) => void;
+
+let _apiLogCallback: ApiLogCallback | null = null;
+
+export function setApiLogCallback(cb: ApiLogCallback | null) {
+  _apiLogCallback = cb;
+}
+
 async function apiFetch<T = unknown>(
   deviceUrl: string,
   path: string,
   opts: RequestInit = {},
 ): Promise<T> {
   const url = `${deviceUrl}${path}`;
+  const method = (opts.method ?? "GET").toUpperCase();
   const headers: Record<string, string> = { ...opts.headers as Record<string, string> };
   if (opts.body) {
     headers["Content-Type"] = "application/json";
   }
+  const t0 = performance.now();
   const res = await fetch(url, { ...opts, headers });
+  const elapsed = Math.round(performance.now() - t0);
   const text = await res.text();
   let json: T;
   try {
@@ -27,6 +38,7 @@ async function apiFetch<T = unknown>(
   } catch {
     json = { raw: text } as T;
   }
+  _apiLogCallback?.(method, path, res.status, res.ok, elapsed);
   if (!res.ok) {
     throw new Error(`HTTP ${res.status}: ${JSON.stringify(json)}`);
   }
