@@ -773,7 +773,7 @@ const FADE_MS = 2000;
 export function MemphisBackground() {
   const [shapes, setShapes] = useState<Shape[]>([]);
   const [fadingOut, setFadingOut] = useState<number | null>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout>>();
+  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => {
     setShapes(generateShapes());
