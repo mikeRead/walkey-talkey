@@ -180,7 +180,7 @@ export function ConfigEditor() {
 
   if (!connected) {
     return (
-      <div className="memphis-bg flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-border px-6 py-16 text-center">
+      <div className="memphis-bg flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-border px-6 py-16 text-center backdrop-blur-[6px]">
         <Layers size={48} className="mb-4 text-text-muted" />
         <h2 className="mb-2 text-xl font-extrabold">No Device Connected</h2>
         <p className="text-sm text-text-muted">

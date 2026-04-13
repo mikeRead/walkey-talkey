@@ -162,6 +162,8 @@ export const api = {
     ),
   recordingDownloadUrl: (deviceUrl: string, file: string) =>
     `${deviceUrl}/api/recordings/download?file=${file}`,
+  recordingAttachmentUrl: (deviceUrl: string, file: string) =>
+    `${deviceUrl}/api/recordings/download?file=${file}&attachment=true`,
   deleteRecording: (url: string, file: string) =>
     apiFetch(url, `/api/recordings/delete?file=${file}`),
 

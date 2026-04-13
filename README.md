@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/logo-transparent.png" alt="WalKEY-TalKEY" width="600" />
+  <img src="server/public/logo-transparent.png" alt="WalKEY-TalKEY" width="600" />
 </p>
 
 # WalKEY-TalKEY
@@ -10,7 +10,7 @@ Swipe it. Tap it. Hold it. Every gesture fires off whatever you tell it to -- ke
 
 **It literally programs itself, and makes the perfect gift for the vibe coder in your life.** And because it shows up as a standard USB keyboard, you can supercharge it even further with [AutoHotkey](https://www.autohotkey.com/) on Windows or [Karabiner-Elements](https://karabiner-elements.pqrs.org/) on macOS. Sky's the limit!
 
-<small>\*Batteries not included.</small>
+\*Batteries not included.
 
 ## What It Does
 

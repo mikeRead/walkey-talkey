@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useDevice } from "@/lib/device-store";
 import { api } from "@/lib/api";
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import type { ModeSummary, WifiConfig } from "@/types/config";
 import { useLogs } from "@/lib/log-store";
 import { useTranscription } from "@/lib/transcription-store";
@@ -26,6 +26,37 @@ interface DeviceInfo {
   modes: ModeSummary[];
   activeMode: string | null;
   wifi: WifiConfig | null;
+}
+
+const TILT_MAX = 15;
+
+function ParallaxLogo() {
+  const [style, setStyle] = useState({ transform: "perspective(600px) rotateX(0deg) rotateY(0deg) scale(1.25)" });
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      const x = (e.clientX / window.innerWidth) - 0.5;
+      const y = (e.clientY / window.innerHeight) - 0.5;
+      setStyle({
+        transform: `perspective(600px) rotateX(${(-y * TILT_MAX).toFixed(1)}deg) rotateY(${(x * TILT_MAX).toFixed(1)}deg) scale(1.25)`,
+      });
+    };
+    window.addEventListener("mousemove", onMove);
+    return () => window.removeEventListener("mousemove", onMove);
+  }, []);
+
+  return (
+    <div className="flex items-center justify-center">
+      <Image
+        src="/logo-transparent.png"
+        alt="WalKEY-TalKEY"
+        width={400}
+        height={400}
+        className="pointer-events-none w-full max-w-lg transition-transform duration-150 ease-out will-change-transform"
+        style={style}
+      />
+    </div>
+  );
 }
 
 export default function HomePage() {
@@ -59,15 +90,7 @@ export default function HomePage() {
       {/* Hero Banner – logo + console */}
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Logo – defines the row height */}
-        <div className="flex items-center justify-center">
-          <Image
-            src="/logo-transparent.png"
-            alt="WalKEY-TalKEY"
-            width={400}
-            height={400}
-            className="w-full max-w-lg scale-125"
-          />
-        </div>
+        <ParallaxLogo />
 
         {/* Console */}
         <DeviceConsole />
@@ -172,7 +195,7 @@ export default function HomePage() {
 
       {/* Not connected prompt */}
       {!connected && !connecting && (
-        <div className="flex flex-col items-center rounded-xl border-2 border-dashed border-border bg-surface/80 backdrop-blur-md px-6 py-12 text-center">
+        <div className="memphis-bg flex flex-col items-center rounded-xl border-2 border-dashed border-border backdrop-blur-[6px] px-6 py-12 text-center">
           <WifiOff size={48} className="mb-4 text-text-muted" />
           <h2 className="mb-2 text-xl font-extrabold">No Device Connected</h2>
           <p className="max-w-md text-sm text-text-muted">
@@ -297,7 +320,7 @@ function QuickCard({
     return (
       <Link
         href={href}
-        className={`card group flex items-center gap-4 transition-all ${borderMap[color]}`}
+        className={`card memphis-bg backdrop-blur-[6px] group flex items-center gap-4 transition-all ${borderMap[color]}`}
       >
         <div className="h-36 w-36 shrink-0 overflow-hidden rounded-lg">
           <Image
@@ -365,6 +388,7 @@ const LOG_TYPE_COLORS: Record<string, string> = {
   ERROR: "text-red-400",
   CONFIG: "text-accent",
   ACTION: "text-secondary",
+  INPUT: "text-highlight",
   API: "text-cyan-400/60",
   API_ERR: "text-red-400",
   WHISPER: "text-purple-400",
@@ -438,10 +462,10 @@ function DeviceConsole() {
   return (
     <>
       {/* Inline console */}
-      <div className="flex max-h-[22rem] flex-col overflow-hidden rounded-2xl border-2 border-border bg-black/90 backdrop-blur-md">
+      <div className="memphis-bg flex max-h-[22rem] flex-col overflow-hidden rounded-2xl border-2 border-border bg-black/80 backdrop-blur-[6px]">
         <button
           onClick={() => setExpanded(true)}
-          className="flex cursor-pointer items-center gap-2 border-b border-white/10 px-4 py-2 text-left hover:bg-white/5 transition-colors"
+          className="flex cursor-pointer items-center gap-2 border-b border-border bg-surface px-4 py-2 text-left hover:bg-surface-raised transition-colors"
         >
           <div className="h-3 w-3 rounded-full bg-accent" />
           <div className="h-3 w-3 rounded-full bg-highlight" />

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 
 const C = {
   primary: "#00BFFF",
@@ -226,6 +226,32 @@ function generateShapes(): Shape[] {
   }
 
   return shapes;
+}
+
+const SMALL_TYPES: Shape["type"][] = [
+  "tri", "ring", "zig", "cross", "squig", "bolt",
+  "dot", "half", "arc", "star", "hex", "diamond", "swirl",
+];
+
+function generateOneShape(): Shape {
+  const type = pick(SMALL_TYPES);
+  const sizeRanges: Record<string, [number, number]> = {
+    squig: [20, 160], zig: [18, 150], bolt: [8, 80], star: [8, 90],
+    ring: [12, 120], arc: [16, 130], half: [14, 110], hex: [8, 85],
+    diamond: [6, 64], cross: [6, 60], tri: [8, 80], dot: [3, 20],
+    swirl: [30, 180],
+  };
+  const [lo, hi] = sizeRanges[type] ?? [10, 60];
+  return {
+    type,
+    x: rand(3, 95),
+    y: rand(3, 95),
+    size: rand(lo, hi),
+    color: pick(COLORS),
+    rotate: rand(-40, 40),
+    stroke: Math.random() > 0.5,
+    opacity: rand(0.35, 1.0),
+  };
 }
 
 /* ---- Deterministic PRNG for per-shape animation timing ---- */
@@ -740,12 +766,46 @@ function renderShape(s: Shape, i: number) {
   );
 }
 
+const RECYCLE_MIN_MS = 60_000;
+const RECYCLE_MAX_MS = 300_000;
+const FADE_MS = 2000;
+
 export function MemphisBackground() {
   const [shapes, setShapes] = useState<Shape[]>([]);
+  const [fadingOut, setFadingOut] = useState<number | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
     setShapes(generateShapes());
   }, []);
+
+  const scheduleRecycle = useCallback(() => {
+    const delay = RECYCLE_MIN_MS + Math.random() * (RECYCLE_MAX_MS - RECYCLE_MIN_MS);
+    timerRef.current = setTimeout(() => {
+      setShapes((prev) => {
+        if (!prev.length) return prev;
+        const idx = Math.floor(Math.random() * prev.length);
+        setFadingOut(idx);
+
+        setTimeout(() => {
+          setShapes((cur) => {
+            const next = [...cur];
+            next[idx] = generateOneShape();
+            return next;
+          });
+          setFadingOut(null);
+        }, FADE_MS);
+
+        return prev;
+      });
+      scheduleRecycle();
+    }, delay);
+  }, []);
+
+  useEffect(() => {
+    if (shapes.length) scheduleRecycle();
+    return () => clearTimeout(timerRef.current);
+  }, [shapes.length, scheduleRecycle]);
 
   const css = useMemo(() => {
     if (!shapes.length) return "";
@@ -761,7 +821,17 @@ export function MemphisBackground() {
         className="pointer-events-none fixed inset-0 z-0 overflow-hidden opacity-[0.35]"
         aria-hidden="true"
       >
-        {shapes.map((s, i) => renderShape(s, i))}
+        {shapes.map((s, i) => (
+          <div
+            key={i}
+            style={{
+              transition: `opacity ${FADE_MS}ms ease-in-out`,
+              opacity: fadingOut === i ? 0 : 1,
+            }}
+          >
+            {renderShape(s, i)}
+          </div>
+        ))}
       </div>
     </>
   );

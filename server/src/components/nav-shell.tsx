@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode } from "react";
+import { type ReactNode, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { DeviceProvider } from "@/lib/device-store";
@@ -29,10 +29,15 @@ const NAV_ITEMS = [
 
 function NavBar() {
   const pathname = usePathname();
-  const { pendingCount } = useTranscription();
+  const { newRecordingCount, markRecordingsSeen } = useTranscription();
+  const onRecordingsPage = pathname.startsWith("/recordings");
+
+  useEffect(() => {
+    if (onRecordingsPage) markRecordingsSeen();
+  }, [onRecordingsPage, markRecordingsSeen]);
 
   return (
-    <nav className="hidden items-center gap-1 md:flex">
+    <nav className="flex items-center gap-1">
       {NAV_ITEMS.map((item) => {
         const active =
           item.href === "/"
@@ -40,24 +45,25 @@ function NavBar() {
             : pathname.startsWith(item.href);
         const showBadge =
           item.href === "/recordings" &&
-          pendingCount > 0 &&
-          !pathname.startsWith("/recordings");
+          newRecordingCount > 0 &&
+          !onRecordingsPage;
         return (
           <Link
             key={item.href}
             href={item.href}
             className={cn(
-              "relative flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-bold uppercase tracking-wider transition-colors",
+              "relative flex items-center gap-1.5 rounded-lg px-2 py-2 text-sm font-bold uppercase tracking-wider transition-colors md:px-3",
               active
                 ? "bg-primary/10 text-primary"
                 : "text-text-muted hover:text-text",
             )}
+            title={item.label}
           >
             <item.icon size={16} />
-            {item.label}
+            <span className="hidden md:inline">{item.label}</span>
             {showBadge && (
               <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold text-white animate-pulse">
-                {pendingCount}
+                {newRecordingCount}
               </span>
             )}
           </Link>

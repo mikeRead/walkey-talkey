@@ -4,7 +4,7 @@
 
 #include "esp_err.h"
 
-#define DEVICE_LOG_MAX_ENTRIES  10
+#define DEVICE_LOG_MAX_ENTRIES  32
 #define DEVICE_LOG_MAX_TYPE     12
 #define DEVICE_LOG_MAX_MESSAGE  80
 

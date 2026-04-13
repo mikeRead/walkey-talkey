@@ -76,7 +76,7 @@ export default function LogsPage() {
 
   return (
     <div>
-      <div className="mb-6 rounded-xl border border-dashed border-border p-6 backdrop-blur-[6px]">
+      <div className="memphis-bg mb-6 rounded-xl border-2 border-dashed border-border p-6 backdrop-blur-[6px]">
         <h1 className="text-2xl font-extrabold sm:text-3xl">
           <span className="text-primary">Device</span>{" "}
           <span className="text-accent">Logs</span>
@@ -118,7 +118,7 @@ export default function LogsPage() {
       </div>
 
       {!connected ? (
-        <div className="flex flex-col items-center rounded-xl border-2 border-dashed border-border bg-surface/80 px-6 py-16 text-center">
+        <div className="memphis-bg flex flex-col items-center rounded-xl border-2 border-dashed border-border px-6 py-16 text-center backdrop-blur-[6px]">
           <WifiOff size={48} className="mb-4 text-text-muted" />
           <h2 className="mb-2 text-xl font-extrabold">No Device Connected</h2>
           <p className="text-sm text-text-muted">
@@ -126,7 +126,7 @@ export default function LogsPage() {
           </p>
         </div>
       ) : logs.length === 0 ? (
-        <div className="flex flex-col items-center rounded-xl border-2 border-dashed border-border bg-surface/80 px-6 py-16 text-center">
+        <div className="memphis-bg flex flex-col items-center rounded-xl border-2 border-dashed border-border px-6 py-16 text-center backdrop-blur-[6px]">
           <ScrollText size={48} className="mb-4 text-text-muted" />
           <h2 className="mb-2 text-xl font-extrabold">No Logs Yet</h2>
           <p className="text-sm text-text-muted">

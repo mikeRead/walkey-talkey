@@ -44,6 +44,8 @@ interface TranscriptionContext {
   deleteTranscription: (path: string) => void;
   deleteRecording: (path: string) => Promise<void>;
   pendingCount: number;
+  newRecordingCount: number;
+  markRecordingsSeen: () => void;
   setRecordingEnabled: (enabled: boolean) => Promise<void>;
   transcriptionVersion: number;
 }
@@ -119,6 +121,7 @@ export function TranscriptionProvider({ children }: { children: ReactNode }) {
   const [recordings, setRecordings] = useState<RecordingFile[]>([]);
   const [settings, setSettings] = useState<RecordingSettings | null>(null);
   const [transcriptionVersion, setTranscriptionVersion] = useState(0);
+  const [newRecordingCount, setNewRecordingCount] = useState(0);
 
   // Transcriptions stored in a ref so updates don't re-render the entire tree.
   // Components that need reactivity use `transcriptionVersion` to trigger re-renders.
@@ -128,6 +131,8 @@ export function TranscriptionProvider({ children }: { children: ReactNode }) {
   const processingRef = useRef(false);
   const workerRef = useRef<Worker | null>(null);
   const mountedRef = useRef(true);
+  const seenPathsRef = useRef<Set<string>>(new Set());
+  const initialPollDoneRef = useRef(false);
 
   // Keep latest values in refs so polling/processing callbacks stay stable
   const deviceUrlRef = useRef(deviceUrl);
@@ -311,6 +316,12 @@ export function TranscriptionProvider({ children }: { children: ReactNode }) {
     addWebLogRef.current("CONFIG", `Recording ${enabled ? "enabled" : "disabled"}`);
   }, []);
 
+  const markRecordingsSeen = useCallback(() => {
+    const seen = seenPathsRef.current;
+    for (const r of recordings) seen.add(r.path);
+    setNewRecordingCount(0);
+  }, [recordings]);
+
   // Stable polling function -- reads everything from refs, never changes identity
   const pollNow = useCallback(async () => {
     if (!mountedRef.current) return;
@@ -319,6 +330,18 @@ export function TranscriptionProvider({ children }: { children: ReactNode }) {
       const recs = await api.getRecordings(url);
       if (!mountedRef.current) return;
       setRecordings(recs);
+
+      const seen = seenPathsRef.current;
+      if (!initialPollDoneRef.current) {
+        for (const rec of recs) seen.add(rec.path);
+        initialPollDoneRef.current = true;
+      } else {
+        let unseen = 0;
+        for (const rec of recs) {
+          if (!seen.has(rec.path)) unseen++;
+        }
+        setNewRecordingCount(unseen);
+      }
 
       const sizes = knownSizesRef.current;
       const txMap = transcriptionsRef.current;
@@ -407,6 +430,8 @@ export function TranscriptionProvider({ children }: { children: ReactNode }) {
       deleteTranscription,
       deleteRecording,
       pendingCount,
+      newRecordingCount,
+      markRecordingsSeen,
       setRecordingEnabled,
       transcriptionVersion,
     }),
@@ -419,6 +444,8 @@ export function TranscriptionProvider({ children }: { children: ReactNode }) {
       deleteTranscription,
       deleteRecording,
       pendingCount,
+      newRecordingCount,
+      markRecordingsSeen,
       setRecordingEnabled,
       transcriptionVersion,
     ],

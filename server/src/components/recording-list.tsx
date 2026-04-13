@@ -64,7 +64,7 @@ export function RecordingList() {
 
   if (!connected) {
     return (
-      <div className="memphis-bg flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-border px-6 py-16 text-center">
+      <div className="memphis-bg flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-border px-6 py-16 text-center backdrop-blur-[6px]">
         <FileAudio size={48} className="mb-4 text-text-muted" />
         <h2 className="mb-2 text-xl font-extrabold">No Device Connected</h2>
         <p className="text-sm text-text-muted">
@@ -91,7 +91,7 @@ export function RecordingList() {
         </button>
         <p className="text-sm text-text-muted">
           {recordingSettings?.enabled
-            ? "Mic activations write WAV files to SD card"
+            ? "Mic activations write WAV files by default"
             : "Enable to save recordings to SD card"}
         </p>
         <button
@@ -112,6 +112,7 @@ export function RecordingList() {
         <div className="space-y-2">
           {recordings.map((rec) => {
             const downloadUrl = api.recordingDownloadUrl(deviceUrl, rec.path);
+            const attachmentUrl = api.recordingAttachmentUrl(deviceUrl, rec.path);
             const ts = getTranscription(rec.path);
 
             return (
@@ -132,7 +133,7 @@ export function RecordingList() {
 
                   <div className="flex gap-2">
                     <a
-                      href={downloadUrl}
+                      href={attachmentUrl}
                       className="btn btn-sm btn-ghost"
                       download
                       title="Download"

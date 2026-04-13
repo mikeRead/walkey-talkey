@@ -128,7 +128,6 @@ export function PlayButton({ src, expectedSize }: PlayButtonProps) {
         width={SIZE}
         height={SIZE}
         className="absolute inset-0"
-        style={{ transform: "scaleX(-1)" }}
       >
         <circle
           cx={SIZE / 2}
@@ -137,6 +136,7 @@ export function PlayButton({ src, expectedSize }: PlayButtonProps) {
           fill="none"
           stroke="var(--color-text-muted)"
           strokeWidth={STROKE}
+          opacity={0.3}
         />
         {playing && (
           <circle
@@ -150,7 +150,6 @@ export function PlayButton({ src, expectedSize }: PlayButtonProps) {
             strokeDashoffset={dashOffset}
             strokeLinecap="round"
             transform={`rotate(-90 ${SIZE / 2} ${SIZE / 2})`}
-            className="transition-[stroke-dashoffset] duration-100"
           />
         )}
       </svg>

@@ -2126,6 +2126,17 @@ static esp_err_t config_http_handle_api_download_recording(httpd_req_t *req)
     httpd_resp_set_hdr(req, "Accept-Ranges", "bytes");
     config_http_set_cors_headers(req);
 
+    char attach_param[8] = {0};
+    if (httpd_query_key_value(query, "attachment", attach_param, sizeof(attach_param)) == ESP_OK
+        && strcmp(attach_param, "true") == 0) {
+        const char *basename = file_param;
+        const char *slash = strrchr(file_param, '/');
+        if (slash) basename = slash + 1;
+        static char cd_hdr[180];
+        snprintf(cd_hdr, sizeof(cd_hdr), "attachment; filename=\"%s\"", basename);
+        httpd_resp_set_hdr(req, "Content-Disposition", cd_hdr);
+    }
+
     #define RANGE_BUFFER_MAX (256 * 1024)
 
     char range_hdr[64] = {0};
