@@ -160,15 +160,11 @@ export default function LogsPage() {
                 </span>
                 {typeBadge(log.type)}
                 <span className="flex-1 text-white/80">{log.message}</span>
-                <span className="shrink-0">
+                <span className="shrink-0" title={log.source === "device" ? "Device" : "Web"}>
                   {log.source === "device" ? (
-                    <Cpu size={12} className="text-primary/50" title="Device" />
+                    <Cpu size={12} className="text-primary/50" />
                   ) : (
-                    <Globe
-                      size={12}
-                      className="text-accent/50"
-                      title="Web"
-                    />
+                    <Globe size={12} className="text-accent/50" />
                   )}
                 </span>
               </div>
