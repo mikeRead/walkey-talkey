@@ -415,8 +415,7 @@ export function TranscriptionProvider({ children }: { children: ReactNode }) {
     return count;
   }, [transcriptionVersion]);
 
-  // Expose fetchRecordings as just a trigger for manual refresh
-  const fetchRecordings = useCallback(() => {
+  const fetchRecordings = useCallback(async () => {
     pollNow();
   }, [pollNow]);
 
